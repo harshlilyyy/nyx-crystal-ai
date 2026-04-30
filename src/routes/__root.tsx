@@ -29,11 +29,11 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Nyx — Strategic Simulation, Beautifully Simple" },
+      { name: "description", content: "Run multi-agent strategic simulations with elegance. Ontology, graph, personas, forecast." },
+      { name: "author", content: "Nyx" },
+      { property: "og:title", content: "Nyx — Strategic Simulation, Beautifully Simple" },
+      { property: "og:description", content: "Run multi-agent strategic simulations with elegance." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -64,6 +64,15 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+import { TabBar } from "@/components/TabBar";
+import { Toaster } from "@/components/ui/sonner";
+
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <TabBar />
+      <Toaster position="top-center" />
+    </>
+  );
 }
