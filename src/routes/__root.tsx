@@ -33,10 +33,14 @@ export const Route = createRootRoute({
       { name: "description", content: "Run multi-agent strategic simulations with elegance. Ontology, graph, personas, forecast." },
       { name: "author", content: "Nyx" },
       { property: "og:title", content: "Nyx — Strategic Simulation, Beautifully Simple" },
-      { property: "og:description", content: "Run multi-agent strategic simulations with elegance." },
+      { property: "og:description", content: "Run multi-agent strategic simulations with elegance. Ontology, graph, personas, forecast." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Nyx — Strategic Simulation, Beautifully Simple" },
+      { name: "twitter:description", content: "Run multi-agent strategic simulations with elegance. Ontology, graph, personas, forecast." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/39e431a2-671b-49bf-b5ab-d3170d43a42c/id-preview-7923d413--e439c28a-6eb0-44ae-95c6-480346c41af6.lovable.app-1777529935830.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/39e431a2-671b-49bf-b5ab-d3170d43a42c/id-preview-7923d413--e439c28a-6eb0-44ae-95c6-480346c41af6.lovable.app-1777529935830.png" },
     ],
     links: [
       {
