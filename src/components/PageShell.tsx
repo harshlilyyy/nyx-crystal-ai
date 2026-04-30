@@ -26,6 +26,12 @@ export function PageShell({
         </header>
       )}
       <div className={cn("space-y-4 animate-float-up", className)}>{children}</div>
+      <footer
+        className="mt-12 pt-8 text-center font-display italic text-sm"
+        style={{ color: "#D4A5A5" }}
+      >
+        harshhhhh1dubeyyyyy · Nyx
+      </footer>
     </div>
   );
 }
