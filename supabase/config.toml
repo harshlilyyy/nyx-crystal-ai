@@ -1,1 +1,4 @@
 project_id = "llqtftpjltjrojhkzssl"
+
+[functions.nyx-ai]
+verify_jwt = false
