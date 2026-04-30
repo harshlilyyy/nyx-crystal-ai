@@ -1,0 +1,247 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PageShell } from "@/components/PageShell";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { getCurrent, saveSimulation } from "@/lib/nyx-store";
+import type { OntologyNode, Simulation } from "@/lib/nyx-types";
+import { ArrowLeft, ArrowRight, Loader2, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/setup")({
+  head: () => ({
+    meta: [
+      { title: "Nyx — Setup" },
+      { name: "description", content: "Seed your simulation, generate an ontology, and build the knowledge graph." },
+    ],
+  }),
+  component: SetupPage,
+});
+
+function SetupPage() {
+  const nav = useNavigate();
+  const [sim, setSim] = useState<Simulation | undefined>();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [seed, setSeed] = useState("");
+  const [ontology, setOntology] = useState<OntologyNode[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const s = getCurrent();
+    if (!s) { nav({ to: "/" }); return; }
+    setSim(s);
+    setSeed(s.seed);
+    setOntology(s.ontology);
+    if (s.graph.nodes.length) setStep(3);
+    else if (s.ontology.length) setStep(2);
+  }, [nav]);
+
+  async function generateOntology() {
+    if (!seed.trim()) { toast.error("Add a seed first"); return; }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: { task: "ontology", seed },
+      });
+      if (error) throw error;
+      const items: OntologyNode[] = data.ontology ?? [];
+      setOntology(items);
+      const next = { ...sim!, seed, ontology: items, status: "setup" as const };
+      setSim(next); saveSimulation(next);
+      setStep(2);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to generate";
+      toast.error(msg);
+    } finally { setLoading(false); }
+  }
+
+  async function buildGraph() {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: { task: "graph", seed, ontology },
+      });
+      if (error) throw error;
+      const next = { ...sim!, seed, ontology, graph: data.graph, status: "setup" as const };
+      setSim(next); saveSimulation(next);
+      setStep(3);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to build graph";
+      toast.error(msg);
+    } finally { setLoading(false); }
+  }
+
+  function continueToAgents() {
+    if (!sim) return;
+    saveSimulation({ ...sim, status: "agents" });
+    nav({ to: "/agents" });
+  }
+
+  return (
+    <PageShell title="Setup" subtitle="Seed → Ontology → Graph">
+      <Steps step={step} onJump={(s) => setStep(s)} />
+
+      {step === 1 && (
+        <div className="glass rounded-[24px] p-5">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Seed
+          </label>
+          <Textarea
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            placeholder="A single sentence or paragraph: a question, decision, or scenario you want to simulate."
+            className="min-h-[180px] resize-none rounded-2xl border-0 bg-white/60 text-base focus-visible:ring-2 focus-visible:ring-primary/40"
+          />
+          <Button
+            onClick={generateOntology}
+            disabled={loading || !seed.trim()}
+            className="mt-4 h-12 w-full rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)] hover:opacity-95"
+          >
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Generate Ontology
+          </Button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-3">
+          {ontology.map((node, i) => (
+            <OntologyCard
+              key={node.id}
+              node={node}
+              onChange={(n) => setOntology(ontology.map((x, j) => (j === i ? n : x)))}
+              onDelete={() => setOntology(ontology.filter((_, j) => j !== i))}
+            />
+          ))}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setStep(1)} className="rounded-2xl">
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back
+            </Button>
+            <Button
+              onClick={buildGraph}
+              disabled={loading || ontology.length === 0}
+              className="h-12 flex-1 rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
+            >
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Build Graph
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && sim && (
+        <div className="space-y-3">
+          <div className="glass rounded-[24px] p-3">
+            <ForceGraph nodes={sim.graph.nodes} edges={sim.graph.edges} />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setStep(2)} className="rounded-2xl">
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back
+            </Button>
+            <Button
+              onClick={continueToAgents}
+              className="h-12 flex-1 rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
+            >
+              Continue to Agents <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </PageShell>
+  );
+}
+
+function Steps({ step, onJump }: { step: number; onJump: (s: 1 | 2 | 3) => void }) {
+  return (
+    <div className="mb-2 flex items-center justify-center gap-2">
+      {[1, 2, 3].map((n) => (
+        <button
+          key={n}
+          onClick={() => onJump(n as 1 | 2 | 3)}
+          className={`h-2 rounded-full transition-all ${step === n ? "w-8 bg-primary" : "w-2 bg-muted-foreground/30"}`}
+          aria-label={`Step ${n}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function OntologyCard({
+  node, onChange, onDelete,
+}: { node: OntologyNode; onChange: (n: OntologyNode) => void; onDelete: () => void }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div className="glass rounded-[22px] p-4">
+      <div className="flex items-start justify-between gap-2">
+        {editing ? (
+          <input
+            value={node.label}
+            onChange={(e) => onChange({ ...node, label: e.target.value })}
+            className="flex-1 rounded-xl bg-white/70 px-3 py-1.5 font-medium outline-none ring-1 ring-border focus:ring-primary/40"
+          />
+        ) : (
+          <div className="font-medium">{node.label}</div>
+        )}
+        <div className="flex gap-1">
+          <button onClick={() => setEditing((v) => !v)} className="rounded-full p-1.5 text-muted-foreground hover:bg-white/60">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={onDelete} className="rounded-full p-1.5 text-muted-foreground hover:bg-white/60">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className="mt-1 inline-block rounded-full bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-secondary-foreground">
+        {node.type}
+      </div>
+      {editing ? (
+        <textarea
+          value={node.description}
+          onChange={(e) => onChange({ ...node, description: e.target.value })}
+          className="mt-2 w-full rounded-xl bg-white/70 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-primary/40"
+          rows={2}
+        />
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">{node.description}</p>
+      )}
+    </div>
+  );
+}
+
+function ForceGraph({ nodes, edges }: { nodes: { id: string; label: string; group: number }[]; edges: { source: string; target: string; weight: number }[] }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const positions = useMemo(() => {
+    const W = 340, H = 320, cx = W / 2, cy = H / 2;
+    const r = 130;
+    return Object.fromEntries(
+      nodes.map((n, i) => {
+        const a = (i / Math.max(1, nodes.length)) * Math.PI * 2;
+        return [n.id, { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }];
+      })
+    );
+  }, [nodes]);
+  const palette = ["#D4A5A5", "#E8D5B5", "#8EC0B5", "#C9A8D4", "#B5C9D4"];
+  return (
+    <svg ref={ref} viewBox="0 0 340 320" className="h-[320px] w-full">
+      {edges.map((e, i) => {
+        const a = positions[e.source], b = positions[e.target];
+        if (!a || !b) return null;
+        return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(180,140,120,0.25)" strokeWidth={Math.max(1, e.weight)} />;
+      })}
+      {nodes.map((n) => {
+        const p = positions[n.id]; if (!p) return null;
+        const c = palette[n.group % palette.length];
+        return (
+          <g key={n.id}>
+            <circle cx={p.x} cy={p.y} r={18} fill={c} opacity={0.85} />
+            <circle cx={p.x} cy={p.y} r={18} fill="none" stroke="white" strokeWidth={2} />
+            <text x={p.x} y={p.y + 32} textAnchor="middle" fontSize={10} fill="#5a4a44" fontFamily="Inter">
+              {n.label.length > 18 ? n.label.slice(0, 16) + "…" : n.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
