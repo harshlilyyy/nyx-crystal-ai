@@ -10,6 +10,14 @@ import { Loader2, Play, Settings2, ChevronUp, ChevronDown, Heart, Repeat2, Messa
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  initRuntime,
+  applyTransitions,
+  rollRandomEvents,
+  applyRoundFeedback,
+  runtimeForPrompt,
+} from "@/lib/nyx-causal";
+import type { AgentRuntime } from "@/lib/nyx-types";
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
@@ -49,6 +57,20 @@ function SimulationPage() {
 
   async function runRound(i: number) {
     if (!sim) return;
+
+    // ---- Advanced causal pre-round ----
+    let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
+    let preEvents: { agentId: string; kind: string; description: string }[] = [];
+    if (sim.advanced) {
+      if (!runtime) runtime = initRuntime(sim.agentIds);
+      // apply state transitions
+      runtime = Object.fromEntries(
+        Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
+      );
+      // roll random events (mutates state inside)
+      preEvents = rollRandomEvents(runtime, i);
+    }
+
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
       body: {
         task: "round",
@@ -59,14 +81,57 @@ function SimulationPage() {
         totalRounds: TOTAL_ROUNDS,
         opts,
         prior: directorNotes,
+        advanced: !!sim.advanced,
+        runtime: runtime ? runtimeForPrompt(runtime) : undefined,
+        events: preEvents,
       },
     });
     if (error) throw error;
-    const round: Round = { index: i, director: data.director, feed: data.feed };
+
+    // Inject random events as visible feed items
+    const eventFeed: FeedItemType[] = preEvents.map((ev, idx) => {
+      const a = NYX_AGENTS.find((x) => x.id === ev.agentId);
+      return {
+        id: `ev_${i}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        agentId: ev.agentId,
+        agentName: a?.name ?? ev.agentId,
+        agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
+        platform: idx % 2 === 0 ? "twitter" : "reddit",
+        action: "POST",
+        content: ev.description,
+        ts: Date.now(),
+        likes: 0,
+        replies: 0,
+        isRandomEvent: true,
+        eventKind: ev.kind,
+      };
+    });
+
+    const combinedFeed = [...eventFeed, ...(data.feed as FeedItemType[])];
+
+    // ---- Advanced causal post-round ----
+    let stateSnapshot: Record<string, AgentRuntime> | undefined;
+    if (sim.advanced && runtime) {
+      runtime = applyRoundFeedback(runtime, combinedFeed, i);
+      stateSnapshot = JSON.parse(JSON.stringify(runtime));
+    }
+
+    const round: Round = {
+      index: i,
+      director: data.director,
+      feed: combinedFeed,
+      stateSnapshot,
+      events: preEvents,
+    };
     setTwitter((p) => [...round.feed.filter((f) => f.platform === "twitter"), ...p]);
     setReddit((p) => [...round.feed.filter((f) => f.platform === "reddit"), ...p]);
     setDirectorNotes((p) => [...p, round.director]);
-    const updated = { ...sim, rounds: [...sim.rounds, round], status: "running" as const };
+    const updated: Simulation = {
+      ...sim,
+      rounds: [...sim.rounds, round],
+      status: "running",
+      runtime: runtime ?? sim.runtime,
+    };
     setSim(updated); saveSimulation(updated);
   }
 
@@ -92,10 +157,17 @@ function SimulationPage() {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
           agentIds: sim.agentIds, rounds: sim.rounds,
+          advanced: !!sim.advanced,
+          runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
         },
       });
       if (error) throw error;
-      const updated = { ...sim, report: data.report, status: "done" as const };
+      let report = data.report;
+      if (sim.advanced) {
+        const { analyzeLoops } = await import("@/lib/nyx-causal");
+        report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+      }
+      const updated = { ...sim, report, status: "done" as const };
       saveSimulation(updated);
       nav({ to: "/report" });
     } catch (e: unknown) {
@@ -154,6 +226,52 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* Advanced state panel */}
+      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Causal State
+            </div>
+            <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-secondary-foreground">
+              Advanced
+            </span>
+          </div>
+          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+            {Object.values(sim.runtime).map((rt) => {
+              const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+              return (
+                <div key={rt.agentId} className="rounded-2xl bg-white/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>{a?.avatar}</span>
+                      <span className="truncate text-xs font-semibold">{a?.name}</span>
+                    </div>
+                    <span className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                      rt.mode === "support_collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
+                      rt.mode === "optimization" ? "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]" :
+                      rt.mode === "avoidance" ? "bg-muted text-muted-foreground" :
+                      rt.mode === "recovery" ? "bg-[oklch(0.92_0.04_70)] text-primary" :
+                      "bg-secondary/60 text-secondary-foreground"
+                    )}>{rt.mode}</span>
+                  </div>
+                  <div className="mt-1 italic text-[11px] text-muted-foreground font-display">"{rt.narrative}"</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1 text-[9px] font-mono">
+                    <StateChip label="trust" v={rt.state.parent_trust} />
+                    <StateChip label="self" v={rt.state.self_worth} />
+                    <StateChip label="anx" v={rt.state.anxiety} />
+                    <StateChip label="iso" v={rt.state.isolation} />
+                    <StateChip label="eff" v={rt.state.effort} />
+                    <StateChip label="eng" v={rt.state.energy} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Feeds */}
       <div className="grid grid-cols-2 gap-3">
         <FeedColumn label="Twitter" items={twitter} />
@@ -192,8 +310,30 @@ function SimulationPage() {
 }
 
 function actionBadge(action: string) {
-  const map: Record<string, string> = { POST: "bg-primary/15 text-primary", COMMENT: "bg-secondary/60 text-secondary-foreground", LIKE: "bg-[oklch(0.92_0.04_25)] text-primary", REPOST: "bg-[oklch(0.9_0.04_180)] text-[oklch(0.45_0.06_180)]" };
+  const map: Record<string, string> = {
+    POST: "bg-primary/15 text-primary",
+    COMMENT: "bg-secondary/60 text-secondary-foreground",
+    LIKE: "bg-[oklch(0.92_0.04_25)] text-primary",
+    REPOST: "bg-[oklch(0.9_0.04_180)] text-[oklch(0.45_0.06_180)]",
+    IDLE: "bg-muted text-muted-foreground",
+    MUTE: "bg-muted text-muted-foreground",
+    WITHDRAW: "bg-[oklch(0.92_0.05_25)] text-primary",
+  };
   return map[action] ?? "bg-muted text-muted-foreground";
+}
+
+function StateChip({ label, v }: { label: string; v: number }) {
+  const positive = v >= 0;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 py-0.5",
+        positive ? "bg-secondary/50 text-secondary-foreground" : "bg-[oklch(0.93_0.04_25)] text-primary"
+      )}
+    >
+      {label} {v.toFixed(2)}
+    </span>
+  );
 }
 
 function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {

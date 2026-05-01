@@ -1,4 +1,4 @@
-export type AgentAction = "POST" | "COMMENT" | "LIKE" | "REPOST";
+export type AgentAction = "POST" | "COMMENT" | "LIKE" | "REPOST" | "IDLE" | "MUTE" | "WITHDRAW";
 
 export interface Agent {
   id: string;
@@ -35,12 +35,49 @@ export interface FeedItem {
   ts: number;
   likes?: number;
   replies?: number;
+  // advanced
+  isRandomEvent?: boolean;
+  eventKind?: string;
+}
+
+// ====== Advanced causal modeling ======
+export interface AgentState {
+  delay_truth: number;
+  parent_trust: number;
+  support: number;
+  consistency: number;
+  self_worth: number;
+  anxiety: number;
+  effort: number;
+  isolation: number;
+  energy: number;
+}
+
+export type StrategyMode = "avoidance" | "recovery" | "exploration" | "optimization" | "support_collapse";
+
+export interface AgentRuntime {
+  agentId: string;
+  state: AgentState;
+  mode: StrategyMode;
+  narrative: string;
+  opportunities: string[]; // open paths
+  closed: string[];        // foreclosed paths
+  history: { round: number; action: AgentAction; outcome: "success" | "failure" | "neutral"; note: string }[];
+}
+
+export interface LoopAnalysis {
+  loops: { agentId: string; pattern: string; rounds: number[]; impact: string }[];
+  compoundEffects: string[];
+  tippingPoints: { agentId: string; threshold: string; round: number }[];
 }
 
 export interface Round {
   index: number;
   director: string;
   feed: FeedItem[];
+  // advanced
+  stateSnapshot?: Record<string, AgentRuntime>;
+  events?: { agentId: string; kind: string; description: string }[];
 }
 
 export interface Report {
@@ -52,6 +89,7 @@ export interface Report {
   hiddenFailures: string[];
   timeline: { period: string; event: string }[];
   summary: string;
+  loopAnalysis?: LoopAnalysis;
 }
 
 export interface Simulation {
@@ -64,4 +102,7 @@ export interface Simulation {
   report?: Report;
   createdAt: number;
   status: "draft" | "setup" | "agents" | "running" | "done";
+  // advanced
+  advanced?: boolean;
+  runtime?: Record<string, AgentRuntime>;
 }

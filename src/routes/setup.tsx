@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrent, saveSimulation } from "@/lib/nyx-store";
 import type { OntologyNode, Simulation } from "@/lib/nyx-types";
-import { ArrowLeft, ArrowRight, Loader2, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Pencil, Trash2, Atom } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Switch } from "@/components/ui/switch";
+import { initRuntime } from "@/lib/nyx-causal";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
@@ -78,9 +80,38 @@ function SetupPage() {
     nav({ to: "/agents" });
   }
 
+  function toggleAdvanced(v: boolean) {
+    if (!sim) return;
+    const next: Simulation = {
+      ...sim,
+      advanced: v,
+      runtime: v ? (sim.runtime ?? (sim.agentIds.length ? initRuntime(sim.agentIds) : undefined)) : sim.runtime,
+    };
+    setSim(next);
+    saveSimulation(next);
+  }
+
   return (
     <PageShell title="Setup" subtitle="Seed → Ontology → Graph">
       <Steps step={step} onJump={(s) => setStep(s)} />
+
+      {/* Advanced Simulation toggle */}
+      <div className="glass rounded-[22px] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-secondary/60">
+              <Atom className="h-4 w-4 text-primary" />
+            </span>
+            <div>
+              <div className="text-sm font-medium">Advanced Simulation</div>
+              <div className="text-[11px] leading-snug text-muted-foreground">
+                Causal modeling: state, thresholds, feedback loops, random events.
+              </div>
+            </div>
+          </div>
+          <Switch checked={!!sim?.advanced} onCheckedChange={toggleAdvanced} />
+        </div>
+      </div>
 
       {step === 1 && (
         <div className="glass rounded-[24px] p-5">
