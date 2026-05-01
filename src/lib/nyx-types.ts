@@ -50,7 +50,19 @@ export interface AgentState {
   anxiety: number;
   effort: number;
   isolation: number;
-  energy: number;
+  energy: number; // 0-100 scale
+  // extended micro-simulation fields
+  intrinsic_motivation: number;
+  burnout: number; // 0-100 scale
+  skill_level: number;
+  networking: number;
+}
+
+export interface OpportunityCard {
+  id: string;
+  kind: "mentor" | "internship" | "partnership" | "audience" | "collab";
+  description: string;
+  round: number;
 }
 
 export type StrategyMode = "avoidance" | "recovery" | "exploration" | "optimization" | "support_collapse";
@@ -62,7 +74,17 @@ export interface AgentRuntime {
   narrative: string;
   opportunities: string[]; // open paths
   closed: string[];        // foreclosed paths
+  consistencyStreak?: number; // consecutive rounds with consistency > 0.6
+  opportunityCards?: OpportunityCard[];
+  trajectoryProbability?: number; // 0-100 LLM-assessed
   history: { round: number; action: AgentAction; outcome: "success" | "failure" | "neutral"; note: string }[];
+}
+
+export interface ActiveLoop {
+  agentId: string;
+  kind: "negative" | "positive";
+  rounds: number[];
+  description: string;
 }
 
 export interface LoopAnalysis {
