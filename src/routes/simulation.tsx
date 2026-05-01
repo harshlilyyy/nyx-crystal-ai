@@ -67,12 +67,16 @@ function SimulationPage() {
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
-      // apply state transitions
       runtime = Object.fromEntries(
         Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
       );
-      // roll random events (mutates state inside)
       preEvents = rollRandomEvents(runtime, i);
+      const regression = rollRegressionEvent(runtime, i);
+      if (regression) preEvents.push(regression);
+      const opps = rollOpportunities(runtime, i);
+      for (const o of opps) {
+        preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+      }
     }
 
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
