@@ -13,8 +13,14 @@ const tabs = [
 export function TabBar() {
   const { pathname } = useLocation();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2">
-      <div className="glass-strong mx-auto flex max-w-md items-center justify-between rounded-[28px] px-2 py-2">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50"
+      style={{ background: "#1E1E1E", boxShadow: "var(--shadow-floating)" }}
+    >
+      <div
+        className="mx-auto flex max-w-md items-center justify-between px-3 pt-2"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
+      >
         {tabs.map((t) => {
           const active = pathname === t.to;
           const Icon = t.icon;
@@ -23,17 +29,24 @@ export function TabBar() {
               key={t.to}
               to={t.to}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 transition-all",
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                "flex flex-1 flex-col items-center gap-1 px-2 py-2 transition-opacity",
+                active ? "opacity-100" : "opacity-60 hover:opacity-90"
               )}
+              style={{ color: "#FDFBF7" }}
             >
-              <span className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-2xl transition-all",
-                active && "gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
-              )}>
-                <Icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+              <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              <span
+                className="text-[10px] tracking-[0.14em] uppercase"
+                style={{ fontFamily: "Inter, sans-serif", fontWeight: active ? 600 : 400 }}
+              >
+                {t.label}
               </span>
-              <span className="text-[10px] font-medium tracking-wide">{t.label}</span>
+              {active && (
+                <span
+                  className="mt-0.5 h-px w-4"
+                  style={{ background: "#C8A97E" }}
+                />
+              )}
             </Link>
           );
         })}
