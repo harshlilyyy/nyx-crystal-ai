@@ -5,12 +5,15 @@
 import type {
   AgentState,
   AgentRuntime,
+  AgentTraits,
   StrategyMode,
   FeedItem,
   Round,
   LoopAnalysis,
   OpportunityCard,
   ActiveLoop,
+  CausalChainEntry,
+  MicroFailure,
 } from "./nyx-types";
 import { NYX_AGENTS } from "./nyx-agents";
 
