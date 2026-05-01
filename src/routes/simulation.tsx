@@ -14,10 +14,14 @@ import {
   initRuntime,
   applyTransitions,
   rollRandomEvents,
+  rollRegressionEvent,
+  rollOpportunities,
   applyRoundFeedback,
   runtimeForPrompt,
+  deriveActiveLoops,
+  trajectoryProbability,
 } from "@/lib/nyx-causal";
-import type { AgentRuntime } from "@/lib/nyx-types";
+import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
