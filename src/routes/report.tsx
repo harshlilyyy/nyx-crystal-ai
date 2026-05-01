@@ -98,6 +98,57 @@ function ReportPage() {
         </ol>
       </Section>
 
+      {/* Loop analysis (advanced sims only) */}
+      {r.loopAnalysis && (
+        <Section title="Feedback Loops" defaultOpen>
+          <div className="space-y-3">
+            {r.loopAnalysis.loops.length === 0 && (
+              <p className="text-xs text-muted-foreground">No compounding loops detected.</p>
+            )}
+            {r.loopAnalysis.loops.map((l, i) => {
+              const a = NYX_AGENTS.find((x) => x.id === l.agentId);
+              const isFailure = l.pattern.startsWith("failure");
+              return (
+                <div key={i} className="rounded-2xl bg-white/70 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold flex items-center gap-1.5">
+                      <span>{a?.avatar}</span>{a?.name ?? l.agentId}
+                    </span>
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                      isFailure ? "bg-[oklch(0.92_0.05_25)] text-primary" : "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]"
+                    )}>{l.pattern}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-muted-foreground">{l.impact}</p>
+                  <div className="mt-1 text-[10px] font-mono text-muted-foreground">
+                    rounds: {l.rounds.map((n) => n + 1).join(" → ")}
+                  </div>
+                </div>
+              );
+            })}
+
+            {r.loopAnalysis.tippingPoints.length > 0 && (
+              <div className="rounded-2xl bg-[oklch(0.95_0.03_25)] p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Tipping points</div>
+                <ul className="mt-1 space-y-1 text-xs">
+                  {r.loopAnalysis.tippingPoints.map((t, i) => (
+                    <li key={i}>· {t.threshold} <span className="text-muted-foreground">(round {t.round + 1})</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {r.loopAnalysis.compoundEffects.length > 0 && (
+              <ul className="space-y-1 text-xs">
+                {r.loopAnalysis.compoundEffects.map((c, i) => (
+                  <li key={i} className="flex gap-2"><span className="text-primary">·</span>{c}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Section>
+      )}
+
       {/* Actions */}
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={copy} className="glass h-11 rounded-2xl"><Copy className="mr-2 h-4 w-4" />Copy</Button>
