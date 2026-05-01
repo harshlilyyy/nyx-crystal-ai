@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getCurrent, saveSimulation } from "@/lib/nyx-store";
 import type { OntologyNode, Simulation } from "@/lib/nyx-types";
-import { ArrowLeft, ArrowRight, Loader2, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Pencil, Trash2, Atom } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Switch } from "@/components/ui/switch";
+import { initRuntime } from "@/lib/nyx-causal";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
@@ -76,6 +78,17 @@ function SetupPage() {
     if (!sim) return;
     saveSimulation({ ...sim, status: "agents" });
     nav({ to: "/agents" });
+  }
+
+  function toggleAdvanced(v: boolean) {
+    if (!sim) return;
+    const next: Simulation = {
+      ...sim,
+      advanced: v,
+      runtime: v ? (sim.runtime ?? (sim.agentIds.length ? initRuntime(sim.agentIds) : undefined)) : sim.runtime,
+    };
+    setSim(next);
+    saveSimulation(next);
   }
 
   return (
