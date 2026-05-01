@@ -44,12 +44,13 @@ function HomePage() {
 
   return (
     <PageShell>
-      <div className="pb-2 pt-6 text-center">
-        <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-3xl gradient-rose text-2xl shadow-[var(--shadow-soft)]">
-          <Sparkles className="h-6 w-6 text-primary-foreground" />
-        </div>
-        <h1 className="font-display text-5xl font-semibold tracking-tight">Nyx</h1>
-        <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground text-balance">
+      <div className="pb-4 pt-4 text-center">
+        <div className="label-eyebrow mb-3">For a heart of gold</div>
+        <h1 className="font-display text-7xl font-semibold tracking-tight leading-none">
+          NYX
+        </h1>
+        <div className="mx-auto mt-3 h-px w-16" style={{ background: "#C8A97E" }} />
+        <p className="mx-auto mt-4 max-w-xs text-sm italic text-muted-foreground text-balance font-display">
           Strategic simulation, beautifully simple.
         </p>
       </div>
