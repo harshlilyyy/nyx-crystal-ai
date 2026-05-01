@@ -134,9 +134,17 @@ Deno.serve(async (req) => {
     if (task === "round") {
       const ids = payload.agentIds as string[];
       const agents = ids.map((id) => ({ id, ...NYX_AGENTS[id] })).filter((a) => a.name);
+      const advanced = !!payload.advanced;
+      const runtime = payload.runtime ?? [];
+      const events = payload.events ?? [];
+
+      const advancedBlock = advanced
+        ? `\n\nADVANCED CAUSAL MODE — RESPECT STRICTLY:\nEach agent has numeric state, a strategy mode, a self-narrative, opportunity surfaces, and an action bias.\nAgent runtime:\n${JSON.stringify(runtime)}\n\nRules you MUST follow:\n- Speak in each agent's voice CONDITIONED on their current state and narrative.\n- If bias.preferred includes IDLE/MUTE/WITHDRAW, that agent MUST mostly choose those actions (silence, opt-out, or one short withdrawn line).\n- If bias.suppressed includes POST, do not have that agent post boldly.\n- mode "support_collapse": agent withdraws or speaks fragmentary, low-energy lines.\n- mode "optimization": agent posts decisive, high-signal content.\n- mode "avoidance": agent likes/idles, deflects.\n- mode "recovery": tentative comments, tries again.\n- Use the LLM (you) to assess CONDITIONAL outcome probabilities at key moments based on world state — do not invent fixed numbers; only set "outcomeProbabilities" when a moment is pivotal.\n- Random events already happened this round (do not repeat them as posts, but you may have other agents react): ${JSON.stringify(events)}\n- Allowed actions: POST, COMMENT, LIKE, REPOST, IDLE, MUTE, WITHDRAW.`
+        : `\n\nStandard Nyx debate mode. Allowed actions: POST, COMMENT, LIKE, REPOST.`;
+
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}\n\nGenerate 8-12 short feed posts (mix of POST/COMMENT/LIKE/REPOST) split between twitter and reddit platforms, each in the agent's distinct voice. Then a 2-sentence director summary.`,
-        "You simulate a multi-agent strategy room. Each post 1-2 short sentences, sharp and in-character.",
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}${advancedBlock}\n\nGenerate 8-12 short feed posts (mix across allowed actions) split between twitter and reddit, each in the agent's distinct voice. Then a 2-sentence director summary. ${advanced ? 'When relevant, include outcomeProbabilities for 1-3 pivotal moments this round.' : ''}`,
+        "You simulate a multi-agent strategy room. Each post 1-2 short sentences, sharp and in-character. In advanced mode, agent psychology dictates action choice.",
         "round",
         {
           type: "object",
@@ -152,13 +160,26 @@ Deno.serve(async (req) => {
                   agentName: { type: "string" },
                   agentAvatar: { type: "string" },
                   platform: { type: "string", enum: ["twitter", "reddit"] },
-                  action: { type: "string", enum: ["POST", "COMMENT", "LIKE", "REPOST"] },
+                  action: { type: "string", enum: ["POST", "COMMENT", "LIKE", "REPOST", "IDLE", "MUTE", "WITHDRAW"] },
                   content: { type: "string" },
                   ts: { type: "integer" },
                   likes: { type: "integer" },
                   replies: { type: "integer" },
                 },
                 required: ["id", "agentId", "agentName", "agentAvatar", "platform", "action", "content", "ts"],
+              },
+            },
+            outcomeProbabilities: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  moment: { type: "string" },
+                  outcome: { type: "string" },
+                  probability: { type: "number" },
+                  rationale: { type: "string" },
+                },
+                required: ["moment", "outcome", "probability"],
               },
             },
           },
