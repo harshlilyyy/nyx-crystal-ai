@@ -444,6 +444,18 @@ function roundState(s: AgentState): AgentState {
     burnout: Math.round(s.burnout),
     skill_level: r(s.skill_level),
     networking: r(s.networking),
+    actual_skill: r(s.actual_skill),
+    perceived_skill: r(s.perceived_skill),
+    signal_strength: r(s.signal_strength),
+    reputation: r(s.reputation),
+    opportunity_access: r(s.opportunity_access),
+    peer_pressure: r(s.peer_pressure),
+    peer_gap: r(s.peer_gap),
+    parent_pressure: r(s.parent_pressure),
+    planning_execution_gap: r(s.planning_execution_gap),
+    skill_depth: r(s.skill_depth),
+    inactionStreak: s.inactionStreak,
+    noProgressStreak: s.noProgressStreak,
   };
 }
 
