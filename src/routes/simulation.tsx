@@ -310,8 +310,30 @@ function SimulationPage() {
 }
 
 function actionBadge(action: string) {
-  const map: Record<string, string> = { POST: "bg-primary/15 text-primary", COMMENT: "bg-secondary/60 text-secondary-foreground", LIKE: "bg-[oklch(0.92_0.04_25)] text-primary", REPOST: "bg-[oklch(0.9_0.04_180)] text-[oklch(0.45_0.06_180)]" };
+  const map: Record<string, string> = {
+    POST: "bg-primary/15 text-primary",
+    COMMENT: "bg-secondary/60 text-secondary-foreground",
+    LIKE: "bg-[oklch(0.92_0.04_25)] text-primary",
+    REPOST: "bg-[oklch(0.9_0.04_180)] text-[oklch(0.45_0.06_180)]",
+    IDLE: "bg-muted text-muted-foreground",
+    MUTE: "bg-muted text-muted-foreground",
+    WITHDRAW: "bg-[oklch(0.92_0.05_25)] text-primary",
+  };
   return map[action] ?? "bg-muted text-muted-foreground";
+}
+
+function StateChip({ label, v }: { label: string; v: number }) {
+  const positive = v >= 0;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-1.5 py-0.5",
+        positive ? "bg-secondary/50 text-secondary-foreground" : "bg-[oklch(0.93_0.04_25)] text-primary"
+      )}
+    >
+      {label} {v.toFixed(2)}
+    </span>
+  );
 }
 
 function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {
