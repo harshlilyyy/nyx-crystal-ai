@@ -9,22 +9,31 @@ import type {
   FeedItem,
   Round,
   LoopAnalysis,
+  OpportunityCard,
+  ActiveLoop,
 } from "./nyx-types";
 import { NYX_AGENTS } from "./nyx-agents";
 
 const clamp = (v: number, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
+const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 export function defaultState(): AgentState {
   return {
-    delay_truth: 0.2,
-    parent_trust: 0.3,
-    support: 0.3,
-    consistency: 0.4,
-    self_worth: 0.3,
-    anxiety: 0.3,
-    effort: 0.5,
-    isolation: 0.2,
-    energy: 0.6,
+    delay_truth: rand(0.1, 0.4),
+    parent_trust: rand(0.2, 0.5),
+    support: rand(0.2, 0.5),
+    consistency: rand(0.3, 0.6),
+    self_worth: rand(0.3, 0.6),
+    anxiety: rand(0.2, 0.5),
+    effort: rand(0.4, 0.7),
+    isolation: rand(0.1, 0.4),
+    energy: rand(50, 80),
+    intrinsic_motivation: rand(0.4, 0.7),
+    burnout: rand(10, 30),
+    skill_level: rand(0.4, 0.7),
+    networking: rand(0.3, 0.6),
   };
 }
 
@@ -55,6 +64,9 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
       narrative: deriveNarrative(state, "I am beginning."),
       opportunities: ["voice", "challenge", "build", "support", "withdraw"],
       closed: [],
+      consistencyStreak: 0,
+      opportunityCards: [],
+      trajectoryProbability: 50,
       history: [],
     };
   }
@@ -65,37 +77,59 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
 // Apply deterministic rules between rounds.
 export function applyTransitions(rt: AgentRuntime): AgentRuntime {
   const s = { ...rt.state };
+  let streak = rt.consistencyStreak ?? 0;
 
-  // Core rules from spec
+  // Track 4-round consistency streak → self_worth boost
+  if (s.consistency > 0.6) {
+    streak += 1;
+    if (streak >= 4) s.self_worth = clamp(s.self_worth + 0.04);
+  } else {
+    streak = 0;
+  }
+
+  // Spec rules
   if (s.delay_truth > 0.5) s.parent_trust = clamp(s.parent_trust - 0.05);
   if (s.consistency > 0.6) s.self_worth = clamp(s.self_worth + 0.03);
+  if (s.support > 0) s.anxiety = clamp01(s.anxiety - 0.03);
+  if (s.self_worth < 0.2) s.support = clamp(s.support - 0.08);
+  if (s.anxiety > 0.7) s.isolation = clamp01(s.isolation + 0.02);
 
   // Compounding effects
   if (s.isolation > 0.6) s.support = clamp(s.support - 0.04);
-  if (s.support < 0) s.anxiety = clamp(s.anxiety + 0.05);
-  if (s.anxiety > 0.7) s.energy = clamp(s.energy - 0.05);
-  if (s.energy < 0.2) s.effort = clamp(s.effort - 0.04);
+  if (s.support < 0) s.anxiety = clamp01(s.anxiety + 0.05);
+  if (s.anxiety > 0.7) s.energy = clamp100(s.energy - 5);
+  if (s.energy < 20) s.effort = clamp01(s.effort - 0.04);
   if (s.effort > 0.6 && s.consistency > 0.5) s.self_worth = clamp(s.self_worth + 0.02);
-  if (s.parent_trust < -0.3) s.anxiety = clamp(s.anxiety + 0.04);
+  if (s.parent_trust < -0.3) s.anxiety = clamp01(s.anxiety + 0.04);
 
-  // Recent action feedback
-  const recent = rt.history.slice(-3);
-  const failures = recent.filter((h) => h.outcome === "failure").length;
+  // Burnout dynamics
+  if (s.effort > 0.7) s.burnout = clamp100(s.burnout + 4);
+  if (s.energy > 60 && s.anxiety < 0.4) s.burnout = clamp100(s.burnout - 3);
+  if (s.burnout > 70) {
+    s.energy = clamp100(s.energy - 6);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation - 0.04);
+  }
+
+  // Skill / networking growth from sustained engagement
+  const recent = rt.history.slice(-4);
   const successes = recent.filter((h) => h.outcome === "success").length;
+  const failures = recent.filter((h) => h.outcome === "failure").length;
+  if (successes >= 2) {
+    s.skill_level = clamp01(s.skill_level + 0.02);
+    s.networking = clamp01(s.networking + 0.02);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation + 0.03);
+  }
   if (failures >= 2) {
     s.self_worth = clamp(s.self_worth - 0.06);
-    s.isolation = clamp(s.isolation + 0.05);
-  }
-  if (successes >= 2) {
-    s.self_worth = clamp(s.self_worth + 0.05);
-    s.support = clamp(s.support + 0.04);
+    s.isolation = clamp01(s.isolation + 0.05);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation - 0.03);
   }
 
   const mode = deriveMode(s);
   const narrative = deriveNarrative(s, rt.narrative);
   const { opportunities, closed } = updateOpportunities(rt, s, mode);
 
-  return { ...rt, state: s, mode, narrative, opportunities, closed };
+  return { ...rt, state: s, mode, narrative, opportunities, closed, consistencyStreak: streak };
 }
 
 // ---------- Thresholds & Mode ----------
@@ -103,30 +137,43 @@ export function deriveMode(s: AgentState): StrategyMode {
   if (s.parent_trust < -0.5 || s.support < -0.5) return "support_collapse";
   if (s.anxiety > 0.7 || s.self_worth < -0.3) return "avoidance";
   if (s.self_worth < 0.2 && s.effort > 0.4) return "recovery";
-  if (s.energy > 0.6 && s.effort > 0.6 && s.consistency > 0.5) return "optimization";
+  if (s.skill_level > 0.8 && s.networking > 0.7) return "optimization";
+  if (s.energy > 60 && s.effort > 0.6 && s.consistency > 0.5) return "optimization";
+  if (s.self_worth > 0.7 && s.intrinsic_motivation > 0.6) return "exploration";
   return "exploration";
 }
 
+// Identity engine — self-narrative driven by self_worth bands.
 export function deriveNarrative(s: AgentState, prev: string): string {
   if (s.parent_trust < -0.5) return "I have lost the room.";
-  if (s.self_worth < -0.2) return "I am a failure.";
-  if (s.self_worth < 0.2 && s.effort > 0.4) return "I am recovering.";
-  if (s.self_worth > 0.5 && s.consistency > 0.5) return "I am improving.";
+  if (s.self_worth < 0.25) return "I am a failure.";
+  if (s.self_worth < 0.55) return "I am recovering.";
+  if (s.self_worth < 0.75) return "I am improving.";
+  if (s.self_worth >= 0.75) return "I am capable.";
   if (s.anxiety > 0.7) return "I am overwhelmed.";
   if (s.isolation > 0.6) return "I am alone in this.";
   return prev || "I am present.";
 }
 
 // ---------- Decision logic under bias ----------
-// Returns a weighted action preference the LLM should respect.
 export function actionBias(rt: AgentRuntime): { preferred: string[]; suppressed: string[] } {
   const s = rt.state;
   const preferred: string[] = [];
   const suppressed: string[] = [];
 
-  if (s.anxiety > 0.6 || s.self_worth < 0) {
+  if (s.anxiety > 0.7 || s.self_worth < 0.3) {
     preferred.push("IDLE", "MUTE", "WITHDRAW");
     suppressed.push("POST");
+  }
+  if (s.intrinsic_motivation > 0.6 && s.self_worth > 0.5) {
+    preferred.push("POST", "COMMENT");
+  }
+  if (s.burnout > 70) {
+    preferred.push("IDLE");
+    suppressed.push("POST", "COMMENT");
+  }
+  if (s.skill_level > 0.7 && s.networking > 0.5) {
+    preferred.push("SEEK_OPPORTUNITY");
   }
   if (rt.mode === "support_collapse") {
     preferred.push("WITHDRAW", "MUTE");
@@ -352,6 +399,124 @@ function roundState(s: AgentState): AgentState {
     anxiety: r(s.anxiety),
     effort: r(s.effort),
     isolation: r(s.isolation),
-    energy: r(s.energy),
+    energy: Math.round(s.energy),
+    intrinsic_motivation: r(s.intrinsic_motivation),
+    burnout: Math.round(s.burnout),
+    skill_level: r(s.skill_level),
+    networking: r(s.networking),
   };
+}
+
+// ---------- Regression events (every 3 rounds, one random agent) ----------
+export function rollRegressionEvent(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number
+): { agentId: string; kind: string; description: string } | null {
+  if ((roundIndex + 1) % 3 !== 0) return null;
+  const ids = Object.keys(runtime);
+  if (ids.length === 0) return null;
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  const rt = runtime[id];
+  const s = rt.state;
+  const a = NYX_AGENTS.find((x) => x.id === id);
+  const name = a?.name ?? id;
+
+  if (s.energy < 30) {
+    s.anxiety = clamp01(s.anxiety + 0.1);
+    s.consistency = clamp01(s.consistency - 0.05);
+    return { agentId: id, kind: "burnout", description: `${name} hit burnout — energy depleted, anxiety spikes.` };
+  }
+  if (s.isolation > 0.6) {
+    s.self_worth = clamp(s.self_worth - 0.05);
+    return { agentId: id, kind: "negative_event", description: `${name} suffers a negative event in isolation — self-worth slips.` };
+  }
+  if (s.parent_trust < -0.4) {
+    s.support = clamp(s.support - 0.1);
+    return { agentId: id, kind: "support_collapse", description: `${name} loses key support — the room turns colder.` };
+  }
+  s.energy = clamp100(s.energy - 8);
+  return { agentId: id, kind: "setback", description: `${name} faces a setback — momentum stalls.` };
+}
+
+// ---------- Opportunity generation ----------
+export function rollOpportunities(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number
+): { agentId: string; card: OpportunityCard }[] {
+  const out: { agentId: string; card: OpportunityCard }[] = [];
+  for (const rt of Object.values(runtime)) {
+    const s = rt.state;
+    const p = s.skill_level * 0.5 + s.networking * 0.3;
+    if (Math.random() < p && s.skill_level > 0.6) {
+      const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+      const kinds: OpportunityCard["kind"][] = ["mentor", "internship", "partnership", "audience", "collab"];
+      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+      const descMap: Record<OpportunityCard["kind"], string> = {
+        mentor: `A mentor reaches out to ${a?.name ?? rt.agentId} with a clear next step.`,
+        internship: `${a?.name ?? rt.agentId} is offered a focused trial role.`,
+        partnership: `${a?.name ?? rt.agentId} is invited into a partnership.`,
+        audience: `${a?.name ?? rt.agentId}'s signal lands with a new audience.`,
+        collab: `${a?.name ?? rt.agentId} is pulled into a collaboration.`,
+      };
+      const card: OpportunityCard = {
+        id: `opp_${roundIndex}_${rt.agentId}_${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        description: descMap[kind],
+        round: roundIndex,
+      };
+      rt.opportunityCards = [...(rt.opportunityCards ?? []), card];
+      rt.state.intrinsic_motivation = clamp01(rt.state.intrinsic_motivation + 0.05);
+      rt.state.support = clamp(rt.state.support + 0.04);
+      out.push({ agentId: rt.agentId, card });
+    }
+  }
+  return out;
+}
+
+// ---------- Active loops (recent rounds window) ----------
+export function deriveActiveLoops(rounds: Round[], windowSize = 3): ActiveLoop[] {
+  const recent = rounds.slice(-windowSize);
+  const tally: Record<string, { fail: number; succ: number; rounds: number[] }> = {};
+  for (const r of recent) {
+    for (const item of r.feed) {
+      const t = tally[item.agentId] ?? { fail: 0, succ: 0, rounds: [] };
+      const isFail = item.action === "IDLE" || item.action === "MUTE" || item.action === "WITHDRAW";
+      if (isFail) t.fail += 1; else t.succ += 1;
+      if (!t.rounds.includes(r.index)) t.rounds.push(r.index);
+      tally[item.agentId] = t;
+    }
+  }
+  const loops: ActiveLoop[] = [];
+  for (const [id, t] of Object.entries(tally)) {
+    const a = NYX_AGENTS.find((x) => x.id === id);
+    if (t.fail >= 2 && t.fail > t.succ) {
+      loops.push({
+        agentId: id,
+        kind: "negative",
+        rounds: t.rounds,
+        description: `${a?.name ?? id} is in a withdrawal loop — confidence eroding, avoidance growing.`,
+      });
+    } else if (t.succ >= 3 && t.succ > t.fail * 2) {
+      loops.push({
+        agentId: id,
+        kind: "positive",
+        rounds: t.rounds,
+        description: `${a?.name ?? id} is in a momentum loop — engagement compounds confidence.`,
+      });
+    }
+  }
+  return loops;
+}
+
+// ---------- Conditional outcome assessment (heuristic) ----------
+export function trajectoryProbability(s: AgentState): number {
+  let p = 50;
+  p += (s.parent_trust + s.support) * 15;
+  p += (s.self_worth - 0.5) * 30;
+  p += (s.consistency - 0.5) * 20;
+  p -= (s.anxiety - 0.5) * 25;
+  p -= (s.isolation - 0.5) * 15;
+  p += (s.intrinsic_motivation - 0.5) * 10;
+  p -= (s.burnout - 50) * 0.2;
+  return Math.max(0, Math.min(100, Math.round(p)));
 }

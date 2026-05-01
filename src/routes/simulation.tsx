@@ -14,10 +14,14 @@ import {
   initRuntime,
   applyTransitions,
   rollRandomEvents,
+  rollRegressionEvent,
+  rollOpportunities,
   applyRoundFeedback,
   runtimeForPrompt,
+  deriveActiveLoops,
+  trajectoryProbability,
 } from "@/lib/nyx-causal";
-import type { AgentRuntime } from "@/lib/nyx-types";
+import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
@@ -63,12 +67,16 @@ function SimulationPage() {
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
-      // apply state transitions
       runtime = Object.fromEntries(
         Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
       );
-      // roll random events (mutates state inside)
       preEvents = rollRandomEvents(runtime, i);
+      const regression = rollRegressionEvent(runtime, i);
+      if (regression) preEvents.push(regression);
+      const opps = rollOpportunities(runtime, i);
+      for (const o of opps) {
+        preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+      }
     }
 
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
@@ -263,14 +271,67 @@ function SimulationPage() {
                     <StateChip label="anx" v={rt.state.anxiety} />
                     <StateChip label="iso" v={rt.state.isolation} />
                     <StateChip label="eff" v={rt.state.effort} />
-                    <StateChip label="eng" v={rt.state.energy} />
+                    <StateChip label="mot" v={rt.state.intrinsic_motivation} />
+                    <StateChip label="skl" v={rt.state.skill_level} />
+                    <StateChip label="net" v={rt.state.networking} />
+                    <StateChip label="eng" v={rt.state.energy / 100} />
+                    <StateChip label="bnt" v={rt.state.burnout / 100} />
                   </div>
+                  <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-muted-foreground">Trajectory</span>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full gradient-rose" style={{ width: `${trajectoryProbability(rt.state)}%` }} />
+                      </div>
+                      <span className="font-mono text-[10px] tabular-nums">{trajectoryProbability(rt.state)}%</span>
+                    </div>
+                  </div>
+                  {rt.opportunityCards && rt.opportunityCards.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {rt.opportunityCards.slice(-3).map((c) => (
+                        <span key={c.id} className="rounded-full bg-[oklch(0.94_0.05_70)] px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                          ✦ {c.kind}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
       )}
+
+      {/* Active Loops */}
+      {sim?.advanced && sim.rounds.length > 0 && (() => {
+        const loops: ActiveLoop[] = deriveActiveLoops(sim.rounds, 3);
+        if (loops.length === 0) return null;
+        return (
+          <div className="glass rounded-[22px] p-4">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Active Loops · last 3 rounds
+            </div>
+            <div className="space-y-1.5">
+              {loops.map((l, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "rounded-2xl px-3 py-2 text-[11px] leading-snug",
+                    l.kind === "negative"
+                      ? "bg-[oklch(0.94_0.05_25)] text-primary"
+                      : "bg-[oklch(0.94_0.05_180)] text-[oklch(0.4_0.06_180)]"
+                  )}
+                >
+                  <span className="mr-1 font-bold uppercase tracking-wider text-[9px]">
+                    {l.kind === "negative" ? "↓ negative" : "↑ positive"}
+                  </span>
+                  {l.description}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Feeds */}
       <div className="grid grid-cols-2 gap-3">
