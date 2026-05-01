@@ -23,6 +23,7 @@ const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 export function defaultState(): AgentState {
+  const skill = rand(0.4, 0.7);
   return {
     delay_truth: rand(0.1, 0.4),
     parent_trust: rand(0.2, 0.5),
@@ -35,9 +36,45 @@ export function defaultState(): AgentState {
     energy: rand(50, 80),
     intrinsic_motivation: rand(0.4, 0.7),
     burnout: rand(10, 30),
-    skill_level: rand(0.4, 0.7),
+    skill_level: skill,
     networking: rand(0.3, 0.6),
+    // v4
+    actual_skill: skill,
+    perceived_skill: skill * rand(0.85, 1.05),
+    signal_strength: rand(0.3, 0.6),
+    reputation: rand(0.2, 0.5),
+    opportunity_access: rand(0.4, 0.7),
+    peer_pressure: rand(0.2, 0.4),
+    peer_gap: 0,
+    parent_pressure: rand(0.3, 0.5),
+    planning_execution_gap: rand(0.2, 0.5),
+    skill_depth: rand(0.2, 0.5),
+    inactionStreak: 0,
+    noProgressStreak: 0,
   };
+}
+
+export function defaultTraits(id: string): AgentTraits {
+  // Deterministic-ish per id with personality bias
+  const bias: Record<string, Partial<AgentTraits>> = {
+    harsh: { risk_tolerance: 0.8, execution_bias: 0.75, social_resilience: 0.7 },
+    jayant: { execution_bias: 0.35, learning_rate: 0.7 },     // planner
+    nova: { execution_bias: 0.4, risk_tolerance: 0.7 },        // forecaster, planner-ish
+    orion: { execution_bias: 0.3, learning_rate: 0.8 },        // futurist, planner
+    sage: { execution_bias: 0.4, learning_rate: 0.75 },        // philosopher, planner
+    arc: { execution_bias: 0.85, social_resilience: 0.8, learning_rate: 0.7 },
+    vera: { execution_bias: 0.7, social_resilience: 0.7 },
+    ren: { execution_bias: 0.9 },
+    sol: { social_resilience: 0.85, risk_tolerance: 0.6 },
+    wren: { risk_tolerance: 0.9 },
+  };
+  const base: AgentTraits = {
+    risk_tolerance: rand(0.3, 0.7),
+    learning_rate: rand(0.4, 0.7),
+    social_resilience: rand(0.4, 0.7),
+    execution_bias: rand(0.4, 0.7),
+  };
+  return { ...base, ...(bias[id] ?? {}) };
 }
 
 // Slight personality-driven variation so agents don't all start identical.
