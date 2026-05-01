@@ -83,6 +83,15 @@ function SimulationPage() {
       const opps = rollOpportunities(runtime, i);
       for (const o of opps) {
         preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+        // v4 — internships trigger network multipliers
+        if (o.card.kind === "internship" || o.card.kind === "partnership") {
+          applyNetworkMultiplier(runtime, o.agentId);
+        }
+      }
+      // v4 — micro-failures (rejections, bad feedback, signal reversals)
+      const microFailures = rollMicroFailures(runtime, i);
+      for (const mf of microFailures) {
+        preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
       }
     }
 
