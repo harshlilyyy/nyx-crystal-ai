@@ -89,7 +89,7 @@ function SimulationPage() {
     if (error) throw error;
 
     // Inject random events as visible feed items
-    const eventFeed: FeedItemType[] = preEvents.map((ev, idx) => {
+    const eventFeed: FeedItem[] = preEvents.map((ev, idx) => {
       const a = NYX_AGENTS.find((x) => x.id === ev.agentId);
       return {
         id: `ev_${i}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
@@ -107,7 +107,7 @@ function SimulationPage() {
       };
     });
 
-    const combinedFeed = [...eventFeed, ...(data.feed as FeedItemType[])];
+    const combinedFeed = [...eventFeed, ...(data.feed as FeedItem[])];
 
     // ---- Advanced causal post-round ----
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
