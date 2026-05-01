@@ -131,39 +131,6 @@ export function applyTransitions(rt: AgentRuntime): AgentRuntime {
 
   return { ...rt, state: s, mode, narrative, opportunities, closed, consistencyStreak: streak };
 }
-  const s = { ...rt.state };
-
-  // Core rules from spec
-  if (s.delay_truth > 0.5) s.parent_trust = clamp(s.parent_trust - 0.05);
-  if (s.consistency > 0.6) s.self_worth = clamp(s.self_worth + 0.03);
-
-  // Compounding effects
-  if (s.isolation > 0.6) s.support = clamp(s.support - 0.04);
-  if (s.support < 0) s.anxiety = clamp(s.anxiety + 0.05);
-  if (s.anxiety > 0.7) s.energy = clamp(s.energy - 0.05);
-  if (s.energy < 0.2) s.effort = clamp(s.effort - 0.04);
-  if (s.effort > 0.6 && s.consistency > 0.5) s.self_worth = clamp(s.self_worth + 0.02);
-  if (s.parent_trust < -0.3) s.anxiety = clamp(s.anxiety + 0.04);
-
-  // Recent action feedback
-  const recent = rt.history.slice(-3);
-  const failures = recent.filter((h) => h.outcome === "failure").length;
-  const successes = recent.filter((h) => h.outcome === "success").length;
-  if (failures >= 2) {
-    s.self_worth = clamp(s.self_worth - 0.06);
-    s.isolation = clamp(s.isolation + 0.05);
-  }
-  if (successes >= 2) {
-    s.self_worth = clamp(s.self_worth + 0.05);
-    s.support = clamp(s.support + 0.04);
-  }
-
-  const mode = deriveMode(s);
-  const narrative = deriveNarrative(s, rt.narrative);
-  const { opportunities, closed } = updateOpportunities(rt, s, mode);
-
-  return { ...rt, state: s, mode, narrative, opportunities, closed };
-}
 
 // ---------- Thresholds & Mode ----------
 export function deriveMode(s: AgentState): StrategyMode {
