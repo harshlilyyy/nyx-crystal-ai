@@ -20,6 +20,13 @@ import {
   runtimeForPrompt,
   deriveActiveLoops,
   trajectoryProbability,
+  applyCompetitionRanking,
+  processRoundOutcomes,
+  rollMicroFailures,
+  applyNetworkMultiplier,
+  pathLockWarning,
+  planningExecutionHint,
+  successScore,
 } from "@/lib/nyx-causal";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
