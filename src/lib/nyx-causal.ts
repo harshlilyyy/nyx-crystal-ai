@@ -108,6 +108,11 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
       opportunityCards: [],
       trajectoryProbability: 50,
       history: [],
+      traits: defaultTraits(id),
+      rank: 0,
+      pathLocked: false,
+      causalChain: [],
+      microFailures: [],
     };
   }
   return out;
