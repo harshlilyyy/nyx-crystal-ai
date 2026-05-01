@@ -70,11 +70,15 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 import { TabBar } from "@/components/TabBar";
 import { Toaster } from "@/components/ui/sonner";
+import { CosmicArena } from "@/components/CosmicArena";
 
 function RootComponent() {
   return (
     <>
-      <Outlet />
+      <CosmicArena />
+      <div className="relative z-10">
+        <Outlet />
+      </div>
       <TabBar />
       <Toaster position="top-center" />
     </>
