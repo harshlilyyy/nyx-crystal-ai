@@ -10,6 +10,14 @@ import { Loader2, Play, Settings2, ChevronUp, ChevronDown, Heart, Repeat2, Messa
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  initRuntime,
+  applyTransitions,
+  rollRandomEvents,
+  applyRoundFeedback,
+  runtimeForPrompt,
+} from "@/lib/nyx-causal";
+import type { AgentRuntime, FeedItem as FeedItemType } from "@/lib/nyx-types";
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
@@ -49,6 +57,20 @@ function SimulationPage() {
 
   async function runRound(i: number) {
     if (!sim) return;
+
+    // ---- Advanced causal pre-round ----
+    let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
+    let preEvents: { agentId: string; kind: string; description: string }[] = [];
+    if (sim.advanced) {
+      if (!runtime) runtime = initRuntime(sim.agentIds);
+      // apply state transitions
+      runtime = Object.fromEntries(
+        Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
+      );
+      // roll random events (mutates state inside)
+      preEvents = rollRandomEvents(runtime, i);
+    }
+
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
       body: {
         task: "round",
@@ -59,14 +81,57 @@ function SimulationPage() {
         totalRounds: TOTAL_ROUNDS,
         opts,
         prior: directorNotes,
+        advanced: !!sim.advanced,
+        runtime: runtime ? runtimeForPrompt(runtime) : undefined,
+        events: preEvents,
       },
     });
     if (error) throw error;
-    const round: Round = { index: i, director: data.director, feed: data.feed };
+
+    // Inject random events as visible feed items
+    const eventFeed: FeedItemType[] = preEvents.map((ev, idx) => {
+      const a = NYX_AGENTS.find((x) => x.id === ev.agentId);
+      return {
+        id: `ev_${i}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        agentId: ev.agentId,
+        agentName: a?.name ?? ev.agentId,
+        agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
+        platform: idx % 2 === 0 ? "twitter" : "reddit",
+        action: "POST",
+        content: ev.description,
+        ts: Date.now(),
+        likes: 0,
+        replies: 0,
+        isRandomEvent: true,
+        eventKind: ev.kind,
+      };
+    });
+
+    const combinedFeed = [...eventFeed, ...(data.feed as FeedItemType[])];
+
+    // ---- Advanced causal post-round ----
+    let stateSnapshot: Record<string, AgentRuntime> | undefined;
+    if (sim.advanced && runtime) {
+      runtime = applyRoundFeedback(runtime, combinedFeed, i);
+      stateSnapshot = JSON.parse(JSON.stringify(runtime));
+    }
+
+    const round: Round = {
+      index: i,
+      director: data.director,
+      feed: combinedFeed,
+      stateSnapshot,
+      events: preEvents,
+    };
     setTwitter((p) => [...round.feed.filter((f) => f.platform === "twitter"), ...p]);
     setReddit((p) => [...round.feed.filter((f) => f.platform === "reddit"), ...p]);
     setDirectorNotes((p) => [...p, round.director]);
-    const updated = { ...sim, rounds: [...sim.rounds, round], status: "running" as const };
+    const updated: Simulation = {
+      ...sim,
+      rounds: [...sim.rounds, round],
+      status: "running",
+      runtime: runtime ?? sim.runtime,
+    };
     setSim(updated); saveSimulation(updated);
   }
 
