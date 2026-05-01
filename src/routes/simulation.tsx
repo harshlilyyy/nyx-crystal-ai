@@ -226,6 +226,52 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* Advanced state panel */}
+      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Causal State
+            </div>
+            <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-secondary-foreground">
+              Advanced
+            </span>
+          </div>
+          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+            {Object.values(sim.runtime).map((rt) => {
+              const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+              return (
+                <div key={rt.agentId} className="rounded-2xl bg-white/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>{a?.avatar}</span>
+                      <span className="truncate text-xs font-semibold">{a?.name}</span>
+                    </div>
+                    <span className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                      rt.mode === "support_collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
+                      rt.mode === "optimization" ? "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]" :
+                      rt.mode === "avoidance" ? "bg-muted text-muted-foreground" :
+                      rt.mode === "recovery" ? "bg-[oklch(0.92_0.04_70)] text-primary" :
+                      "bg-secondary/60 text-secondary-foreground"
+                    )}>{rt.mode}</span>
+                  </div>
+                  <div className="mt-1 italic text-[11px] text-muted-foreground font-display">"{rt.narrative}"</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1 text-[9px] font-mono">
+                    <StateChip label="trust" v={rt.state.parent_trust} />
+                    <StateChip label="self" v={rt.state.self_worth} />
+                    <StateChip label="anx" v={rt.state.anxiety} />
+                    <StateChip label="iso" v={rt.state.isolation} />
+                    <StateChip label="eff" v={rt.state.effort} />
+                    <StateChip label="eng" v={rt.state.energy} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Feeds */}
       <div className="grid grid-cols-2 gap-3">
         <FeedColumn label="Twitter" items={twitter} />
