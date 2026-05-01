@@ -137,30 +137,43 @@ export function deriveMode(s: AgentState): StrategyMode {
   if (s.parent_trust < -0.5 || s.support < -0.5) return "support_collapse";
   if (s.anxiety > 0.7 || s.self_worth < -0.3) return "avoidance";
   if (s.self_worth < 0.2 && s.effort > 0.4) return "recovery";
-  if (s.energy > 0.6 && s.effort > 0.6 && s.consistency > 0.5) return "optimization";
+  if (s.skill_level > 0.8 && s.networking > 0.7) return "optimization";
+  if (s.energy > 60 && s.effort > 0.6 && s.consistency > 0.5) return "optimization";
+  if (s.self_worth > 0.7 && s.intrinsic_motivation > 0.6) return "exploration";
   return "exploration";
 }
 
+// Identity engine — self-narrative driven by self_worth bands.
 export function deriveNarrative(s: AgentState, prev: string): string {
   if (s.parent_trust < -0.5) return "I have lost the room.";
-  if (s.self_worth < -0.2) return "I am a failure.";
-  if (s.self_worth < 0.2 && s.effort > 0.4) return "I am recovering.";
-  if (s.self_worth > 0.5 && s.consistency > 0.5) return "I am improving.";
+  if (s.self_worth < 0.25) return "I am a failure.";
+  if (s.self_worth < 0.55) return "I am recovering.";
+  if (s.self_worth < 0.75) return "I am improving.";
+  if (s.self_worth >= 0.75) return "I am capable.";
   if (s.anxiety > 0.7) return "I am overwhelmed.";
   if (s.isolation > 0.6) return "I am alone in this.";
   return prev || "I am present.";
 }
 
 // ---------- Decision logic under bias ----------
-// Returns a weighted action preference the LLM should respect.
 export function actionBias(rt: AgentRuntime): { preferred: string[]; suppressed: string[] } {
   const s = rt.state;
   const preferred: string[] = [];
   const suppressed: string[] = [];
 
-  if (s.anxiety > 0.6 || s.self_worth < 0) {
+  if (s.anxiety > 0.7 || s.self_worth < 0.3) {
     preferred.push("IDLE", "MUTE", "WITHDRAW");
     suppressed.push("POST");
+  }
+  if (s.intrinsic_motivation > 0.6 && s.self_worth > 0.5) {
+    preferred.push("POST", "COMMENT");
+  }
+  if (s.burnout > 70) {
+    preferred.push("IDLE");
+    suppressed.push("POST", "COMMENT");
+  }
+  if (s.skill_level > 0.7 && s.networking > 0.5) {
+    preferred.push("SEEK_OPPORTUNITY");
   }
   if (rt.mode === "support_collapse") {
     preferred.push("WITHDRAW", "MUTE");
