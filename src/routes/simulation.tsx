@@ -157,10 +157,17 @@ function SimulationPage() {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
           agentIds: sim.agentIds, rounds: sim.rounds,
+          advanced: !!sim.advanced,
+          runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
         },
       });
       if (error) throw error;
-      const updated = { ...sim, report: data.report, status: "done" as const };
+      let report = data.report;
+      if (sim.advanced) {
+        const { analyzeLoops } = await import("@/lib/nyx-causal");
+        report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+      }
+      const updated = { ...sim, report, status: "done" as const };
       saveSimulation(updated);
       nav({ to: "/report" });
     } catch (e: unknown) {
