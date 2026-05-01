@@ -119,6 +119,12 @@ export interface AgentRuntime {
   opportunityCards?: OpportunityCard[];
   trajectoryProbability?: number; // 0-100 LLM-assessed
   history: { round: number; action: AgentAction; outcome: "success" | "failure" | "neutral"; note: string }[];
+  // v4
+  traits?: AgentTraits;
+  rank?: number;          // 1 = best
+  pathLocked?: boolean;   // skill_depth > threshold
+  causalChain?: CausalChainEntry[];
+  microFailures?: MicroFailure[];
 }
 
 export interface ActiveLoop {
