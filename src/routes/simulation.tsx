@@ -137,6 +137,9 @@ function SimulationPage() {
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
     if (sim.advanced && runtime) {
       runtime = applyRoundFeedback(runtime, combinedFeed, i);
+      // v4 — action→outcome pipeline + competition ranking
+      processRoundOutcomes(runtime, combinedFeed, i);
+      applyCompetitionRanking(runtime);
       stateSnapshot = JSON.parse(JSON.stringify(runtime));
     }
 
