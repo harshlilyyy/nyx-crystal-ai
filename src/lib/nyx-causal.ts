@@ -399,6 +399,124 @@ function roundState(s: AgentState): AgentState {
     anxiety: r(s.anxiety),
     effort: r(s.effort),
     isolation: r(s.isolation),
-    energy: r(s.energy),
+    energy: Math.round(s.energy),
+    intrinsic_motivation: r(s.intrinsic_motivation),
+    burnout: Math.round(s.burnout),
+    skill_level: r(s.skill_level),
+    networking: r(s.networking),
   };
+}
+
+// ---------- Regression events (every 3 rounds, one random agent) ----------
+export function rollRegressionEvent(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number
+): { agentId: string; kind: string; description: string } | null {
+  if ((roundIndex + 1) % 3 !== 0) return null;
+  const ids = Object.keys(runtime);
+  if (ids.length === 0) return null;
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  const rt = runtime[id];
+  const s = rt.state;
+  const a = NYX_AGENTS.find((x) => x.id === id);
+  const name = a?.name ?? id;
+
+  if (s.energy < 30) {
+    s.anxiety = clamp01(s.anxiety + 0.1);
+    s.consistency = clamp01(s.consistency - 0.05);
+    return { agentId: id, kind: "burnout", description: `${name} hit burnout — energy depleted, anxiety spikes.` };
+  }
+  if (s.isolation > 0.6) {
+    s.self_worth = clamp(s.self_worth - 0.05);
+    return { agentId: id, kind: "negative_event", description: `${name} suffers a negative event in isolation — self-worth slips.` };
+  }
+  if (s.parent_trust < -0.4) {
+    s.support = clamp(s.support - 0.1);
+    return { agentId: id, kind: "support_collapse", description: `${name} loses key support — the room turns colder.` };
+  }
+  s.energy = clamp100(s.energy - 8);
+  return { agentId: id, kind: "setback", description: `${name} faces a setback — momentum stalls.` };
+}
+
+// ---------- Opportunity generation ----------
+export function rollOpportunities(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number
+): { agentId: string; card: OpportunityCard }[] {
+  const out: { agentId: string; card: OpportunityCard }[] = [];
+  for (const rt of Object.values(runtime)) {
+    const s = rt.state;
+    const p = s.skill_level * 0.5 + s.networking * 0.3;
+    if (Math.random() < p && s.skill_level > 0.6) {
+      const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+      const kinds: OpportunityCard["kind"][] = ["mentor", "internship", "partnership", "audience", "collab"];
+      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+      const descMap: Record<OpportunityCard["kind"], string> = {
+        mentor: `A mentor reaches out to ${a?.name ?? rt.agentId} with a clear next step.`,
+        internship: `${a?.name ?? rt.agentId} is offered a focused trial role.`,
+        partnership: `${a?.name ?? rt.agentId} is invited into a partnership.`,
+        audience: `${a?.name ?? rt.agentId}'s signal lands with a new audience.`,
+        collab: `${a?.name ?? rt.agentId} is pulled into a collaboration.`,
+      };
+      const card: OpportunityCard = {
+        id: `opp_${roundIndex}_${rt.agentId}_${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        description: descMap[kind],
+        round: roundIndex,
+      };
+      rt.opportunityCards = [...(rt.opportunityCards ?? []), card];
+      rt.state.intrinsic_motivation = clamp01(rt.state.intrinsic_motivation + 0.05);
+      rt.state.support = clamp(rt.state.support + 0.04);
+      out.push({ agentId: rt.agentId, card });
+    }
+  }
+  return out;
+}
+
+// ---------- Active loops (recent rounds window) ----------
+export function deriveActiveLoops(rounds: Round[], windowSize = 3): ActiveLoop[] {
+  const recent = rounds.slice(-windowSize);
+  const tally: Record<string, { fail: number; succ: number; rounds: number[] }> = {};
+  for (const r of recent) {
+    for (const item of r.feed) {
+      const t = tally[item.agentId] ?? { fail: 0, succ: 0, rounds: [] };
+      const isFail = item.action === "IDLE" || item.action === "MUTE" || item.action === "WITHDRAW";
+      if (isFail) t.fail += 1; else t.succ += 1;
+      if (!t.rounds.includes(r.index)) t.rounds.push(r.index);
+      tally[item.agentId] = t;
+    }
+  }
+  const loops: ActiveLoop[] = [];
+  for (const [id, t] of Object.entries(tally)) {
+    const a = NYX_AGENTS.find((x) => x.id === id);
+    if (t.fail >= 2 && t.fail > t.succ) {
+      loops.push({
+        agentId: id,
+        kind: "negative",
+        rounds: t.rounds,
+        description: `${a?.name ?? id} is in a withdrawal loop — confidence eroding, avoidance growing.`,
+      });
+    } else if (t.succ >= 3 && t.succ > t.fail * 2) {
+      loops.push({
+        agentId: id,
+        kind: "positive",
+        rounds: t.rounds,
+        description: `${a?.name ?? id} is in a momentum loop — engagement compounds confidence.`,
+      });
+    }
+  }
+  return loops;
+}
+
+// ---------- Conditional outcome assessment (heuristic) ----------
+export function trajectoryProbability(s: AgentState): number {
+  let p = 50;
+  p += (s.parent_trust + s.support) * 15;
+  p += (s.self_worth - 0.5) * 30;
+  p += (s.consistency - 0.5) * 20;
+  p -= (s.anxiety - 0.5) * 25;
+  p -= (s.isolation - 0.5) * 15;
+  p += (s.intrinsic_motivation - 0.5) * 10;
+  p -= (s.burnout - 50) * 0.2;
+  return Math.max(0, Math.min(100, Math.round(p)));
 }
