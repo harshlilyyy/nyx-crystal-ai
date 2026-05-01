@@ -56,6 +56,47 @@ export interface AgentState {
   burnout: number; // 0-100 scale
   skill_level: number;
   networking: number;
+  // v4 — competitive & signal dynamics
+  actual_skill: number;        // 0-1 true ability
+  perceived_skill: number;     // 0-1 signal/reputation
+  signal_strength: number;     // 0-1 quality of broadcast
+  reputation: number;          // 0-1 cumulative standing
+  opportunity_access: number;  // 0-1 reachable opportunity bandwidth
+  peer_pressure: number;       // 0-1 comparison stress
+  peer_gap: number;            // -1..1 distance from leader
+  parent_pressure: number;     // 0-1 family expectation load
+  planning_execution_gap: number; // 0-1 (high = plans>>executes)
+  skill_depth: number;         // 0-1 specialization depth (lock-in metric)
+  inactionStreak?: number;
+  noProgressStreak?: number;
+}
+
+// v4 — persistent agent traits
+export interface AgentTraits {
+  risk_tolerance: number;     // 0-1
+  learning_rate: number;      // 0-1
+  social_resilience: number;  // 0-1
+  execution_bias: number;     // 0-1 (high = executor; low = planner)
+}
+
+// v4 — action→outcome causal chain entry (for telemetry visualization)
+export interface CausalChainEntry {
+  agentId: string;
+  round: number;
+  action: string;
+  skillGain: number;
+  signalDelta: number;
+  opportunityDelta: number;
+  reputationDelta: number;
+  note: string;
+}
+
+// v4 — micro-failure events
+export interface MicroFailure {
+  agentId: string;
+  kind: "rejected_application" | "failed_interview" | "bad_feedback" | "missed_deadline";
+  description: string;
+  round: number;
 }
 
 export interface OpportunityCard {
@@ -78,6 +119,12 @@ export interface AgentRuntime {
   opportunityCards?: OpportunityCard[];
   trajectoryProbability?: number; // 0-100 LLM-assessed
   history: { round: number; action: AgentAction; outcome: "success" | "failure" | "neutral"; note: string }[];
+  // v4
+  traits?: AgentTraits;
+  rank?: number;          // 1 = best
+  pathLocked?: boolean;   // skill_depth > threshold
+  causalChain?: CausalChainEntry[];
+  microFailures?: MicroFailure[];
 }
 
 export interface ActiveLoop {

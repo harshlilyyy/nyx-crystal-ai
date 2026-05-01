@@ -5,12 +5,15 @@
 import type {
   AgentState,
   AgentRuntime,
+  AgentTraits,
   StrategyMode,
   FeedItem,
   Round,
   LoopAnalysis,
   OpportunityCard,
   ActiveLoop,
+  CausalChainEntry,
+  MicroFailure,
 } from "./nyx-types";
 import { NYX_AGENTS } from "./nyx-agents";
 
@@ -20,6 +23,7 @@ const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 export function defaultState(): AgentState {
+  const skill = rand(0.4, 0.7);
   return {
     delay_truth: rand(0.1, 0.4),
     parent_trust: rand(0.2, 0.5),
@@ -32,9 +36,45 @@ export function defaultState(): AgentState {
     energy: rand(50, 80),
     intrinsic_motivation: rand(0.4, 0.7),
     burnout: rand(10, 30),
-    skill_level: rand(0.4, 0.7),
+    skill_level: skill,
     networking: rand(0.3, 0.6),
+    // v4
+    actual_skill: skill,
+    perceived_skill: skill * rand(0.85, 1.05),
+    signal_strength: rand(0.3, 0.6),
+    reputation: rand(0.2, 0.5),
+    opportunity_access: rand(0.4, 0.7),
+    peer_pressure: rand(0.2, 0.4),
+    peer_gap: 0,
+    parent_pressure: rand(0.3, 0.5),
+    planning_execution_gap: rand(0.2, 0.5),
+    skill_depth: rand(0.2, 0.5),
+    inactionStreak: 0,
+    noProgressStreak: 0,
   };
+}
+
+export function defaultTraits(id: string): AgentTraits {
+  // Deterministic-ish per id with personality bias
+  const bias: Record<string, Partial<AgentTraits>> = {
+    harsh: { risk_tolerance: 0.8, execution_bias: 0.75, social_resilience: 0.7 },
+    jayant: { execution_bias: 0.35, learning_rate: 0.7 },     // planner
+    nova: { execution_bias: 0.4, risk_tolerance: 0.7 },        // forecaster, planner-ish
+    orion: { execution_bias: 0.3, learning_rate: 0.8 },        // futurist, planner
+    sage: { execution_bias: 0.4, learning_rate: 0.75 },        // philosopher, planner
+    arc: { execution_bias: 0.85, social_resilience: 0.8, learning_rate: 0.7 },
+    vera: { execution_bias: 0.7, social_resilience: 0.7 },
+    ren: { execution_bias: 0.9 },
+    sol: { social_resilience: 0.85, risk_tolerance: 0.6 },
+    wren: { risk_tolerance: 0.9 },
+  };
+  const base: AgentTraits = {
+    risk_tolerance: rand(0.3, 0.7),
+    learning_rate: rand(0.4, 0.7),
+    social_resilience: rand(0.4, 0.7),
+    execution_bias: rand(0.4, 0.7),
+  };
+  return { ...base, ...(bias[id] ?? {}) };
 }
 
 // Slight personality-driven variation so agents don't all start identical.
@@ -68,6 +108,11 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
       opportunityCards: [],
       trajectoryProbability: 50,
       history: [],
+      traits: defaultTraits(id),
+      rank: 0,
+      pathLocked: false,
+      causalChain: [],
+      microFailures: [],
     };
   }
   return out;
@@ -404,6 +449,18 @@ function roundState(s: AgentState): AgentState {
     burnout: Math.round(s.burnout),
     skill_level: r(s.skill_level),
     networking: r(s.networking),
+    actual_skill: r(s.actual_skill),
+    perceived_skill: r(s.perceived_skill),
+    signal_strength: r(s.signal_strength),
+    reputation: r(s.reputation),
+    opportunity_access: r(s.opportunity_access),
+    peer_pressure: r(s.peer_pressure),
+    peer_gap: r(s.peer_gap),
+    parent_pressure: r(s.parent_pressure),
+    planning_execution_gap: r(s.planning_execution_gap),
+    skill_depth: r(s.skill_depth),
+    inactionStreak: s.inactionStreak,
+    noProgressStreak: s.noProgressStreak,
   };
 }
 
@@ -519,4 +576,265 @@ export function trajectoryProbability(s: AgentState): number {
   p += (s.intrinsic_motivation - 0.5) * 10;
   p -= (s.burnout - 50) * 0.2;
   return Math.max(0, Math.min(100, Math.round(p)));
+}
+
+// ============================================================
+// v4 — Competitive & Signal Dynamics
+// ============================================================
+
+const SKILL_DEPTH_LOCK = 0.7;
+
+// Composite "perceived success" score per agent (drives ranking).
+export function successScore(rt: AgentRuntime): number {
+  const s = rt.state;
+  return (
+    s.reputation * 0.35 +
+    s.perceived_skill * 0.25 +
+    s.opportunity_access * 0.15 +
+    s.self_worth * 0.15 +
+    s.networking * 0.10
+  );
+}
+
+// Rank agents 1..N (1 = best). Mutates runtime.rank and returns ordered ids.
+export function applyCompetitionRanking(
+  runtime: Record<string, AgentRuntime>
+): { agentId: string; score: number; rank: number }[] {
+  const scored = Object.values(runtime).map((rt) => ({
+    agentId: rt.agentId,
+    score: successScore(rt),
+    rank: 0,
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  scored.forEach((r, i) => {
+    r.rank = i + 1;
+    const rt = runtime[r.agentId];
+    if (rt) rt.rank = r.rank;
+  });
+
+  // Comparison effect — laggards feel pressure
+  const top = scored[0]?.score ?? 0;
+  for (const r of scored) {
+    const rt = runtime[r.agentId];
+    if (!rt) continue;
+    const gap = top - r.score;                 // 0 for leader
+    rt.state.peer_gap = clamp(gap, -1, 1);
+    if (gap > 0.05) {
+      const resilience = rt.traits?.social_resilience ?? 0.5;
+      const pressureGain = gap * (1 - resilience) * 0.5;
+      rt.state.peer_pressure = clamp01(rt.state.peer_pressure + pressureGain);
+      rt.state.self_worth = clamp(rt.state.self_worth - pressureGain * 0.4);
+    } else {
+      // leader bleeds pressure
+      rt.state.peer_pressure = clamp01(rt.state.peer_pressure - 0.04);
+    }
+  }
+  return scored;
+}
+
+// Action → outcome pipeline. Returns the causal chain entry and applies deltas.
+export function processActionOutcome(
+  rt: AgentRuntime,
+  action: string,
+  engagement: number,
+  roundIndex: number
+): CausalChainEntry {
+  const t = rt.traits ?? { risk_tolerance: 0.5, learning_rate: 0.5, social_resilience: 0.5, execution_bias: 0.5 };
+  const s = rt.state;
+
+  const isExec = action === "POST" || action === "COMMENT" || action === "REPOST";
+  const isIdle = action === "IDLE" || action === "MUTE" || action === "WITHDRAW";
+
+  // Execution vs planning gap
+  if (isIdle) s.planning_execution_gap = clamp01(s.planning_execution_gap + 0.04 * (1 - t.execution_bias));
+  if (isExec) s.planning_execution_gap = clamp01(s.planning_execution_gap - 0.05 * t.execution_bias);
+
+  // Skill gain (only real with execution; planning alone barely moves it)
+  let skillGain = 0;
+  if (isExec) {
+    skillGain = t.learning_rate * 0.04 * (1 - s.actual_skill);
+    s.actual_skill = clamp01(s.actual_skill + skillGain);
+    s.skill_depth = clamp01(s.skill_depth + skillGain * 1.2);
+  }
+
+  // Signal strength rises with engagement; can be inflated without real skill (short-term)
+  const signalDelta = isExec ? 0.03 + Math.min(0.1, engagement * 0.01) : -0.02;
+  s.signal_strength = clamp01(s.signal_strength + signalDelta);
+
+  // Perceived skill follows signal more than reality (short-term drift)
+  const targetPerceived = 0.6 * s.signal_strength + 0.4 * s.actual_skill;
+  s.perceived_skill = clamp01(s.perceived_skill * 0.7 + targetPerceived * 0.3);
+
+  // Opportunity access — execution and networking grow it; idle shrinks it
+  const oppDelta = isExec
+    ? 0.03 + s.networking * 0.04
+    : isIdle
+      ? -0.05
+      : 0;
+  s.opportunity_access = clamp01(s.opportunity_access + oppDelta);
+
+  // Reputation = slow accumulation of consistent visible action
+  const repDelta = isExec ? Math.min(0.06, engagement * 0.005 + 0.01) : isIdle ? -0.03 : 0;
+  s.reputation = clamp01(s.reputation + repDelta);
+
+  // Inaction streak tracking
+  if (isIdle) {
+    s.inactionStreak = (s.inactionStreak ?? 0) + 1;
+  } else {
+    s.inactionStreak = 0;
+  }
+
+  // After 3 rounds inaction — sharper opportunity loss + anxiety
+  if ((s.inactionStreak ?? 0) >= 3) {
+    s.opportunity_access = clamp01(s.opportunity_access - 0.08);
+    s.anxiety = clamp01(s.anxiety + 0.06);
+    s.peer_gap = clamp(s.peer_gap + 0.05, -1, 1);
+  }
+
+  // No-progress streak (skill_depth growth tracker handled separately)
+  if (skillGain < 0.001) {
+    s.noProgressStreak = (s.noProgressStreak ?? 0) + 1;
+  } else {
+    s.noProgressStreak = 0;
+  }
+
+  // Path lock-in
+  if (s.skill_depth >= SKILL_DEPTH_LOCK) rt.pathLocked = true;
+
+  const entry: CausalChainEntry = {
+    agentId: rt.agentId,
+    round: roundIndex,
+    action,
+    skillGain: +skillGain.toFixed(3),
+    signalDelta: +signalDelta.toFixed(3),
+    opportunityDelta: +oppDelta.toFixed(3),
+    reputationDelta: +repDelta.toFixed(3),
+    note: isIdle ? "delay penalty applied" : isExec ? "action → skill → signal → opportunity" : "low-impact action",
+  };
+  rt.causalChain = [...(rt.causalChain ?? []), entry].slice(-20);
+  return entry;
+}
+
+// Process all feed items through the v4 outcome pipeline.
+export function processRoundOutcomes(
+  runtime: Record<string, AgentRuntime>,
+  feed: FeedItem[],
+  roundIndex: number
+): CausalChainEntry[] {
+  const entries: CausalChainEntry[] = [];
+  for (const item of feed) {
+    const rt = runtime[item.agentId];
+    if (!rt) continue;
+    const engagement = (item.likes ?? 0) + (item.replies ?? 0) * 1.5;
+    entries.push(processActionOutcome(rt, item.action, engagement, roundIndex));
+  }
+  return entries;
+}
+
+// Parent expectation dynamics — visible progress eases pressure; failure raises it.
+export function updateParentExpectation(rt: AgentRuntime): void {
+  const s = rt.state;
+  const recent = rt.history.slice(-3);
+  const successes = recent.filter((h) => h.outcome === "success").length;
+  const failures = recent.filter((h) => h.outcome === "failure").length;
+  if (failures >= 2) {
+    s.parent_pressure = clamp01(s.parent_pressure + 0.08);
+  } else if (successes >= 2) {
+    s.parent_pressure = clamp01(s.parent_pressure - 0.06);
+    s.parent_trust = clamp(s.parent_trust + 0.04);
+  }
+  // 3 rounds no progress → trust drops sharply
+  if ((s.noProgressStreak ?? 0) >= 3) {
+    s.parent_trust = clamp(s.parent_trust - 0.12);
+    s.parent_pressure = clamp01(s.parent_pressure + 0.1);
+  }
+}
+
+// Long-term reversal: if perceived >> actual for too long, signal collapses.
+export function applySignalReversal(rt: AgentRuntime, roundIndex: number): MicroFailure | null {
+  const s = rt.state;
+  const gap = s.perceived_skill - s.actual_skill;
+  if (gap > 0.25 && Math.random() < 0.35) {
+    s.signal_strength = clamp01(s.signal_strength - 0.18);
+    s.perceived_skill = clamp01(s.perceived_skill - 0.15);
+    s.reputation = clamp01(s.reputation - 0.1);
+    s.self_worth = clamp(s.self_worth - 0.08);
+    const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+    const mf: MicroFailure = {
+      agentId: rt.agentId,
+      kind: "bad_feedback",
+      description: `${a?.name ?? rt.agentId} — signal exceeded substance; reputation correction.`,
+      round: roundIndex,
+    };
+    rt.microFailures = [...(rt.microFailures ?? []), mf];
+    return mf;
+  }
+  return null;
+}
+
+// Micro-failures (small disruptions). Probability rises with anxiety/inaction.
+export function rollMicroFailures(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number
+): MicroFailure[] {
+  const out: MicroFailure[] = [];
+  const kinds: MicroFailure["kind"][] = ["rejected_application", "failed_interview", "bad_feedback", "missed_deadline"];
+  for (const rt of Object.values(runtime)) {
+    const s = rt.state;
+    const p = Math.min(0.4, 0.05 + s.anxiety * 0.2 + (s.inactionStreak ?? 0) * 0.05);
+    if (Math.random() < p) {
+      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+      const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+      const descMap: Record<MicroFailure["kind"], string> = {
+        rejected_application: `${a?.name ?? rt.agentId} — application rejected.`,
+        failed_interview: `${a?.name ?? rt.agentId} — interview did not land.`,
+        bad_feedback: `${a?.name ?? rt.agentId} — received harsh feedback.`,
+        missed_deadline: `${a?.name ?? rt.agentId} — missed a key deadline.`,
+      };
+      const mf: MicroFailure = { agentId: rt.agentId, kind, description: descMap[kind], round: roundIndex };
+      // confidence dip + decision noise (anxiety up)
+      s.self_worth = clamp(s.self_worth - 0.05);
+      s.anxiety = clamp01(s.anxiety + 0.06);
+      rt.microFailures = [...(rt.microFailures ?? []), mf];
+      out.push(mf);
+    }
+    // Long-term reversal check
+    const rev = applySignalReversal(rt, roundIndex);
+    if (rev) out.push(rev);
+    // Parent dynamics each round
+    updateParentExpectation(rt);
+  }
+  return out;
+}
+
+// Network effects — when an agent gains a major opportunity, multipliers ripple.
+export function applyNetworkMultiplier(
+  runtime: Record<string, AgentRuntime>,
+  agentId: string
+): void {
+  const lead = runtime[agentId];
+  if (!lead) return;
+  lead.state.opportunity_access = clamp01(lead.state.opportunity_access + 0.12);
+  lead.state.networking = clamp01(lead.state.networking + 0.08);
+  for (const rt of Object.values(runtime)) {
+    if (rt.agentId === agentId) continue;
+    // Peer agents get a small lift proportional to their networking
+    const lift = 0.03 + rt.state.networking * 0.04;
+    rt.state.opportunity_access = clamp01(rt.state.opportunity_access + lift);
+  }
+}
+
+// Trajectory lock warning helper for UI
+export function pathLockWarning(rt: AgentRuntime): string | null {
+  if (rt.pathLocked) return `Path locked — ${rt.agentId} skill_depth ${rt.state.skill_depth.toFixed(2)}`;
+  if (rt.state.skill_depth > 0.55) return `Lock-in approaching (${rt.state.skill_depth.toFixed(2)}/${SKILL_DEPTH_LOCK})`;
+  return null;
+}
+
+// Planning vs execution heuristic for UI
+export function planningExecutionHint(rt: AgentRuntime): string | null {
+  const g = rt.state.planning_execution_gap;
+  if (g > 0.65) return "High plan/exec gap — slow real progress.";
+  if (g < 0.25) return "Tight execution — converting plans to action.";
+  return null;
 }

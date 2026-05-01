@@ -20,6 +20,13 @@ import {
   runtimeForPrompt,
   deriveActiveLoops,
   trajectoryProbability,
+  applyCompetitionRanking,
+  processRoundOutcomes,
+  rollMicroFailures,
+  applyNetworkMultiplier,
+  pathLockWarning,
+  planningExecutionHint,
+  successScore,
 } from "@/lib/nyx-causal";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
@@ -76,6 +83,15 @@ function SimulationPage() {
       const opps = rollOpportunities(runtime, i);
       for (const o of opps) {
         preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+        // v4 — internships trigger network multipliers
+        if (o.card.kind === "internship" || o.card.kind === "partnership") {
+          applyNetworkMultiplier(runtime, o.agentId);
+        }
+      }
+      // v4 — micro-failures (rejections, bad feedback, signal reversals)
+      const microFailures = rollMicroFailures(runtime, i);
+      for (const mf of microFailures) {
+        preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
       }
     }
 
@@ -121,6 +137,9 @@ function SimulationPage() {
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
     if (sim.advanced && runtime) {
       runtime = applyRoundFeedback(runtime, combinedFeed, i);
+      // v4 — action→outcome pipeline + competition ranking
+      processRoundOutcomes(runtime, combinedFeed, i);
+      applyCompetitionRanking(runtime);
       stateSnapshot = JSON.parse(JSON.stringify(runtime));
     }
 
@@ -234,6 +253,36 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* v4 — Competition Ranking */}
+      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary">
+            Competition Ranking
+          </div>
+          <div className="space-y-1.5">
+            {[...Object.values(sim.runtime)]
+              .map((rt) => ({ rt, score: successScore(rt) }))
+              .sort((a, b) => b.score - a.score)
+              .map(({ rt, score }, i) => {
+                const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+                return (
+                  <div key={rt.agentId} className="flex items-center gap-2 text-[11px]">
+                    <span className="w-5 text-center font-mono font-bold text-primary tabular-nums">#{i + 1}</span>
+                    <span>{a?.avatar}</span>
+                    <span className="flex-1 truncate font-semibold">{a?.name}</span>
+                    <div className="h-1 w-20 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full gradient-rose" style={{ width: `${Math.round(score * 100)}%` }} />
+                    </div>
+                    <span className="w-10 text-right font-mono tabular-nums text-muted-foreground">
+                      {Math.round(score * 100)}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Advanced state panel */}
       {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
         <div className="glass rounded-[22px] p-4">
@@ -245,13 +294,21 @@ function SimulationPage() {
               Advanced
             </span>
           </div>
-          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
             {Object.values(sim.runtime).map((rt) => {
               const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+              const lock = pathLockWarning(rt);
+              const planHint = planningExecutionHint(rt);
+              const lastChain = rt.causalChain && rt.causalChain.length > 0 ? rt.causalChain[rt.causalChain.length - 1] : null;
               return (
                 <div key={rt.agentId} className="rounded-2xl bg-white/70 p-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 truncate">
+                      {rt.rank ? (
+                        <span className="rounded-full bg-secondary/60 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-secondary-foreground">
+                          #{rt.rank}
+                        </span>
+                      ) : null}
                       <span>{a?.avatar}</span>
                       <span className="truncate text-xs font-semibold">{a?.name}</span>
                     </div>
@@ -272,8 +329,15 @@ function SimulationPage() {
                     <StateChip label="iso" v={rt.state.isolation} />
                     <StateChip label="eff" v={rt.state.effort} />
                     <StateChip label="mot" v={rt.state.intrinsic_motivation} />
-                    <StateChip label="skl" v={rt.state.skill_level} />
+                    <StateChip label="real-skl" v={rt.state.actual_skill} />
+                    <StateChip label="perc-skl" v={rt.state.perceived_skill} />
+                    <StateChip label="rep" v={rt.state.reputation} />
+                    <StateChip label="opp" v={rt.state.opportunity_access} />
                     <StateChip label="net" v={rt.state.networking} />
+                    <StateChip label="peer" v={rt.state.peer_pressure} />
+                    <StateChip label="p-prs" v={rt.state.parent_pressure} />
+                    <StateChip label="plan/exe" v={rt.state.planning_execution_gap} />
+                    <StateChip label="depth" v={rt.state.skill_depth} />
                     <StateChip label="eng" v={rt.state.energy / 100} />
                     <StateChip label="bnt" v={rt.state.burnout / 100} />
                   </div>
@@ -286,11 +350,46 @@ function SimulationPage() {
                       <span className="font-mono text-[10px] tabular-nums">{trajectoryProbability(rt.state)}%</span>
                     </div>
                   </div>
+                  {lastChain && (
+                    <div className="mt-1.5 rounded-xl bg-secondary/30 px-2 py-1 text-[10px] font-mono leading-snug">
+                      <span className="font-bold text-primary">{lastChain.action}</span>
+                      <span className="mx-1">→</span>skill {lastChain.skillGain >= 0 ? "+" : ""}{lastChain.skillGain}
+                      <span className="mx-1">→</span>signal {lastChain.signalDelta >= 0 ? "+" : ""}{lastChain.signalDelta}
+                      <span className="mx-1">→</span>opp {lastChain.opportunityDelta >= 0 ? "+" : ""}{lastChain.opportunityDelta}
+                      <span className="mx-1">→</span>rep {lastChain.reputationDelta >= 0 ? "+" : ""}{lastChain.reputationDelta}
+                    </div>
+                  )}
+                  {(lock || planHint || rt.pathLocked) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1 text-[9px]">
+                      {lock && (
+                        <span className={cn(
+                          "rounded-full px-1.5 py-0.5 font-medium",
+                          rt.pathLocked ? "bg-[oklch(0.92_0.06_25)] text-primary" : "bg-[oklch(0.94_0.05_70)] text-primary"
+                        )}>
+                          {rt.pathLocked ? "🔒 " : "⚠ "}{lock}
+                        </span>
+                      )}
+                      {planHint && (
+                        <span className="rounded-full bg-secondary/50 px-1.5 py-0.5 font-medium text-secondary-foreground">
+                          {planHint}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {rt.opportunityCards && rt.opportunityCards.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {rt.opportunityCards.slice(-3).map((c) => (
                         <span key={c.id} className="rounded-full bg-[oklch(0.94_0.05_70)] px-1.5 py-0.5 text-[9px] font-medium text-primary">
                           ✦ {c.kind}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {rt.microFailures && rt.microFailures.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {rt.microFailures.slice(-2).map((m, idx) => (
+                        <span key={idx} className="rounded-full bg-[oklch(0.93_0.05_25)] px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                          ⚠ {m.kind.replace(/_/g, " ")}
                         </span>
                       ))}
                     </div>
