@@ -17,7 +17,7 @@ import {
   applyRoundFeedback,
   runtimeForPrompt,
 } from "@/lib/nyx-causal";
-import type { AgentRuntime, FeedItem as FeedItemType } from "@/lib/nyx-types";
+import type { AgentRuntime } from "@/lib/nyx-types";
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
