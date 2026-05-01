@@ -9,22 +9,31 @@ import type {
   FeedItem,
   Round,
   LoopAnalysis,
+  OpportunityCard,
+  ActiveLoop,
 } from "./nyx-types";
 import { NYX_AGENTS } from "./nyx-agents";
 
 const clamp = (v: number, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
+const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 export function defaultState(): AgentState {
   return {
-    delay_truth: 0.2,
-    parent_trust: 0.3,
-    support: 0.3,
-    consistency: 0.4,
-    self_worth: 0.3,
-    anxiety: 0.3,
-    effort: 0.5,
-    isolation: 0.2,
-    energy: 0.6,
+    delay_truth: rand(0.1, 0.4),
+    parent_trust: rand(0.2, 0.5),
+    support: rand(0.2, 0.5),
+    consistency: rand(0.3, 0.6),
+    self_worth: rand(0.3, 0.6),
+    anxiety: rand(0.2, 0.5),
+    effort: rand(0.4, 0.7),
+    isolation: rand(0.1, 0.4),
+    energy: rand(50, 80),
+    intrinsic_motivation: rand(0.4, 0.7),
+    burnout: rand(10, 30),
+    skill_level: rand(0.4, 0.7),
+    networking: rand(0.3, 0.6),
   };
 }
 
@@ -55,6 +64,9 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
       narrative: deriveNarrative(state, "I am beginning."),
       opportunities: ["voice", "challenge", "build", "support", "withdraw"],
       closed: [],
+      consistencyStreak: 0,
+      opportunityCards: [],
+      trajectoryProbability: 50,
       history: [],
     };
   }
@@ -64,6 +76,61 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
 // ---------- Transitions ----------
 // Apply deterministic rules between rounds.
 export function applyTransitions(rt: AgentRuntime): AgentRuntime {
+  const s = { ...rt.state };
+  let streak = rt.consistencyStreak ?? 0;
+
+  // Track 4-round consistency streak → self_worth boost
+  if (s.consistency > 0.6) {
+    streak += 1;
+    if (streak >= 4) s.self_worth = clamp(s.self_worth + 0.04);
+  } else {
+    streak = 0;
+  }
+
+  // Spec rules
+  if (s.delay_truth > 0.5) s.parent_trust = clamp(s.parent_trust - 0.05);
+  if (s.consistency > 0.6) s.self_worth = clamp(s.self_worth + 0.03);
+  if (s.support > 0) s.anxiety = clamp01(s.anxiety - 0.03);
+  if (s.self_worth < 0.2) s.support = clamp(s.support - 0.08);
+  if (s.anxiety > 0.7) s.isolation = clamp01(s.isolation + 0.02);
+
+  // Compounding effects
+  if (s.isolation > 0.6) s.support = clamp(s.support - 0.04);
+  if (s.support < 0) s.anxiety = clamp01(s.anxiety + 0.05);
+  if (s.anxiety > 0.7) s.energy = clamp100(s.energy - 5);
+  if (s.energy < 20) s.effort = clamp01(s.effort - 0.04);
+  if (s.effort > 0.6 && s.consistency > 0.5) s.self_worth = clamp(s.self_worth + 0.02);
+  if (s.parent_trust < -0.3) s.anxiety = clamp01(s.anxiety + 0.04);
+
+  // Burnout dynamics
+  if (s.effort > 0.7) s.burnout = clamp100(s.burnout + 4);
+  if (s.energy > 60 && s.anxiety < 0.4) s.burnout = clamp100(s.burnout - 3);
+  if (s.burnout > 70) {
+    s.energy = clamp100(s.energy - 6);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation - 0.04);
+  }
+
+  // Skill / networking growth from sustained engagement
+  const recent = rt.history.slice(-4);
+  const successes = recent.filter((h) => h.outcome === "success").length;
+  const failures = recent.filter((h) => h.outcome === "failure").length;
+  if (successes >= 2) {
+    s.skill_level = clamp01(s.skill_level + 0.02);
+    s.networking = clamp01(s.networking + 0.02);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation + 0.03);
+  }
+  if (failures >= 2) {
+    s.self_worth = clamp(s.self_worth - 0.06);
+    s.isolation = clamp01(s.isolation + 0.05);
+    s.intrinsic_motivation = clamp01(s.intrinsic_motivation - 0.03);
+  }
+
+  const mode = deriveMode(s);
+  const narrative = deriveNarrative(s, rt.narrative);
+  const { opportunities, closed } = updateOpportunities(rt, s, mode);
+
+  return { ...rt, state: s, mode, narrative, opportunities, closed, consistencyStreak: streak };
+}
   const s = { ...rt.state };
 
   // Core rules from spec
