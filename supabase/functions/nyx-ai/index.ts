@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
 
     if (task === "report") {
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}\n\nProduce a Strategic Forecast Report.`,
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}${payload.advanced ? `\n\nADVANCED CAUSAL MODE: Final agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\nIn the report, weight verdict by causal trajectories — who collapsed, who compounded gains, which feedback loops dominated. Use LLM-assessed conditional probabilities, not fixed numbers.` : ""}\n\nProduce a Strategic Forecast Report.`,
         "You are Vera, the Nyx Report Agent. Synthesize the simulation into a clear, decision-ready forecast.",
         "report",
         {
