@@ -147,11 +147,15 @@ function SimulationPage() {
     // ---- Advanced causal post-round ----
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
     if (sim.advanced && runtime) {
-      runtime = applyRoundFeedback(runtime, combinedFeed, i);
-      // v4 — action→outcome pipeline + competition ranking
-      processRoundOutcomes(runtime, combinedFeed, i);
-      applyCompetitionRanking(runtime);
-      stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      if (hasV5(runtime)) {
+        // v5: state already advanced in pre-round; just snapshot
+        stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      } else {
+        runtime = applyRoundFeedback(runtime, combinedFeed, i);
+        processRoundOutcomes(runtime, combinedFeed, i);
+        applyCompetitionRanking(runtime);
+        stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      }
     }
 
     const round: Round = {
