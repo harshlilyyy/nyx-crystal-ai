@@ -142,6 +142,25 @@ function SetupPage() {
           </div>
           <Switch checked={!!sim?.advanced} onCheckedChange={toggleAdvanced} />
         </div>
+        {sim?.advanced && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2">
+            <div className="text-[11px] leading-snug text-muted-foreground">
+              {sim.agentIds.length > 0
+                ? "Initialize 10-variable agent state from your scenario."
+                : "Pick agents first, then re-initialize from seed."}
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={loading || !sim.seed.trim() || sim.agentIds.length === 0}
+              onClick={() => initAdvancedFromSeed(sim)}
+              className="rounded-full text-xs"
+            >
+              {loading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Re-initialize
+            </Button>
+          </div>
+        )}
       </div>
 
       {step === 1 && (
