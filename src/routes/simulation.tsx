@@ -355,8 +355,8 @@ function SimulationPage() {
         </div>
       )}
 
-      {/* Advanced state panel */}
-      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+      {/* Advanced state panel (legacy v3/v4 — hidden when v5 active) */}
+      {sim?.advanced && sim.runtime && !hasV5(sim.runtime) && Object.keys(sim.runtime).length > 0 && (
         <div className="glass rounded-[22px] p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
