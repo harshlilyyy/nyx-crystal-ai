@@ -27,8 +27,15 @@ import {
   pathLockWarning,
   planningExecutionHint,
   successScore,
+  applyV5Round,
+  v5Telemetry,
 } from "@/lib/nyx-causal";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
+
+function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
+  if (!runtime) return false;
+  return Object.values(runtime).some((rt) => !!rt.core);
+}
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
