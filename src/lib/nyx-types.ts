@@ -108,6 +108,30 @@ export interface OpportunityCard {
 
 export type StrategyMode = "avoidance" | "recovery" | "exploration" | "optimization" | "support_collapse";
 
+// v5 — 10 core variables (all 0..1)
+export interface CoreState {
+  self_worth: number;
+  anxiety: number;
+  consistency: number;
+  momentum: number;
+  reputation: number;
+  opportunity_access: number;
+  fragility_index: number;
+  lock_in: number;
+  learning_rate: number;
+  energy: number;
+}
+
+export type CoreVar = keyof CoreState;
+
+export interface CustomVariable {
+  name: string;
+  value: number;
+  min: number;
+  max: number;
+  affects: CoreVar; // which ONE core variable it affects
+}
+
 export interface AgentRuntime {
   agentId: string;
   state: AgentState;
@@ -125,6 +149,15 @@ export interface AgentRuntime {
   pathLocked?: boolean;   // skill_depth > threshold
   causalChain?: CausalChainEntry[];
   microFailures?: MicroFailure[];
+  // v5 — seed-extracted core engine
+  core?: CoreState;
+  customVars?: CustomVariable[];
+  successStreak?: number;
+  failureStreak?: number;
+  cascade?: boolean;      // transient flag
+  identity_conflict?: number; // 0..1
+  timePressure?: number;  // 0..1, grows by round
+  modeV5?: "growth" | "recovery" | "fragile" | "collapse" | "steady";
 }
 
 export interface ActiveLoop {

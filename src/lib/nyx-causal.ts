@@ -838,3 +838,257 @@ export function planningExecutionHint(rt: AgentRuntime): string | null {
   if (g < 0.25) return "Tight execution — converting plans to action.";
   return null;
 }
+
+// ============================================================
+// v5 — Seed-based core engine (10 vars, transitions, cascade)
+// ============================================================
+import type { CoreState, CoreVar, CustomVariable } from "./nyx-types";
+
+const CORE_KEYS: CoreVar[] = [
+  "self_worth", "anxiety", "consistency", "momentum", "reputation",
+  "opportunity_access", "fragility_index", "lock_in", "learning_rate", "energy",
+];
+
+export function isCoreVar(k: string): k is CoreVar {
+  return (CORE_KEYS as string[]).includes(k);
+}
+
+export function defaultCore(): CoreState {
+  return {
+    self_worth: 0.5, anxiety: 0.3, consistency: 0.5, momentum: 0.5,
+    reputation: 0.4, opportunity_access: 0.5, fragility_index: 0.3,
+    lock_in: 0.2, learning_rate: 0.5, energy: 0.6,
+  };
+}
+
+export function normalizeCore(input: Partial<Record<CoreVar, number>>): CoreState {
+  const c = defaultCore();
+  for (const k of CORE_KEYS) {
+    const v = input[k];
+    if (typeof v === "number" && !Number.isNaN(v)) c[k] = clamp01(v);
+  }
+  return c;
+}
+
+export function validateCorePayload(raw: unknown): { ok: boolean; reason?: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, reason: "not object" };
+  const obj = raw as Record<string, unknown>;
+  if (Object.keys(obj).length === 0) return { ok: false, reason: "empty" };
+  for (const [name, val] of Object.entries(obj)) {
+    if (!val || typeof val !== "object") return { ok: false, reason: `${name}: not object` };
+    const v = val as Record<string, unknown>;
+    const core = (v.core ?? v.state ?? v) as Record<string, unknown>;
+    for (const k of CORE_KEYS) {
+      const n = core[k];
+      if (typeof n !== "number" || Number.isNaN(n) || n < 0 || n > 1) {
+        return { ok: false, reason: `${name}.${k} invalid (${n})` };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+// Map AI extraction (keyed by agent name) onto runtime keyed by agentId.
+// agentMap: { agentId -> agentName }. Falls back gracefully.
+export function applyExtractedInit(
+  runtime: Record<string, AgentRuntime>,
+  extracted: Record<string, { core?: Partial<CoreState>; state?: Partial<CoreState>; custom?: CustomVariable[]; customVariables?: CustomVariable[] }>,
+  agentMap: Record<string, string>
+): Record<string, AgentRuntime> {
+  const lower = Object.fromEntries(
+    Object.entries(extracted).map(([k, v]) => [k.toLowerCase().trim(), v])
+  );
+  const next = { ...runtime };
+  for (const [agentId, name] of Object.entries(agentMap)) {
+    const found = lower[name.toLowerCase().trim()];
+    const rt = next[agentId];
+    if (!rt) continue;
+    if (!found) { rt.core = defaultCore(); continue; }
+    const raw = (found.core ?? found.state ?? {}) as Partial<CoreState>;
+    rt.core = normalizeCore(raw);
+    const cv = (found.custom ?? found.customVariables ?? []).slice(0, 3).filter((c) =>
+      c && typeof c.name === "string" && typeof c.value === "number" && isCoreVar(String(c.affects))
+    ).map((c) => ({
+      name: c.name,
+      value: clamp01(c.value),
+      min: typeof c.min === "number" ? c.min : 0,
+      max: typeof c.max === "number" ? c.max : 1,
+      affects: c.affects as CoreVar,
+    }));
+    rt.customVars = cv;
+    rt.successStreak = 0;
+    rt.failureStreak = 0;
+    rt.cascade = false;
+    rt.identity_conflict = 0;
+    rt.timePressure = 0;
+    rt.modeV5 = "steady";
+  }
+  return next;
+}
+
+// Compute peer_gap: how far this agent's reputation lags the visible leader.
+function computePeerGap(rt: AgentRuntime, all: AgentRuntime[]): number {
+  if (!rt.core) return 0;
+  // perception distortion: agents see leader's reputation amplified by ~10%
+  const visible = all.map((r) => (r.core?.reputation ?? 0) * 1.1);
+  const top = Math.max(...visible);
+  const gap = top - rt.core.reputation;
+  return clamp01(gap);
+}
+
+// Stochastic round outcome flags per agent.
+function rollFlags(rt: AgentRuntime): {
+  success_flag: number; failure_flag: number; signal_boost: number;
+  social_feedback: number; mentor_flag: number; event_driven: number;
+} {
+  if (!rt.core) {
+    return { success_flag: 0, failure_flag: 0, signal_boost: 0, social_feedback: 0, mentor_flag: 0, event_driven: 0 };
+  }
+  const c = rt.core;
+  const pSuccess = clamp01(0.2 + 0.5 * c.consistency + 0.2 * c.opportunity_access);
+  const pCollapse = clamp01(0.2 + 0.4 * c.anxiety + 0.2 * c.fragility_index);
+  const success_flag = Math.random() < pSuccess ? 1 : 0;
+  const failure_flag = Math.random() < pCollapse ? 1 : 0;
+  const signal_boost = success_flag ? 0.3 + Math.random() * 0.4 : 0;
+  const social_feedback = success_flag ? 0.2 + Math.random() * 0.3 : (failure_flag ? -0.15 : 0);
+  // mentor handled separately in applyV5Round (deterministic on streak)
+  const event_driven = clamp01((failure_flag ? 0.3 : 0) + Math.random() * 0.2);
+  return { success_flag, failure_flag, signal_boost, social_feedback, mentor_flag: 0, event_driven };
+}
+
+// Apply one full round of v5 transitions. Returns events.
+export function applyV5Round(
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number,
+  totalRounds: number
+): { agentId: string; kind: string; description: string }[] {
+  const all = Object.values(runtime);
+  const events: { agentId: string; kind: string; description: string }[] = [];
+
+  // global time pressure (grows linearly toward 1.0 by final round)
+  const tp = clamp01((roundIndex + 1) / Math.max(1, totalRounds));
+
+  for (const rt of all) {
+    if (!rt.core) rt.core = defaultCore();
+    const c = { ...rt.core };
+    const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+    const name = a?.name ?? rt.agentId;
+    rt.timePressure = tp;
+
+    // Mentor event: deterministic if consistency > 0.7 for 3 consecutive rounds
+    rt.consistencyStreak = c.consistency > 0.7 ? (rt.consistencyStreak ?? 0) + 1 : 0;
+    const mentor_flag = (rt.consistencyStreak ?? 0) >= 3 ? 1 : 0;
+    if (mentor_flag) {
+      events.push({ agentId: rt.agentId, kind: "mentor", description: `${name} attracts a mentor — sustained consistency rewarded.` });
+      rt.consistencyStreak = 0;
+    }
+
+    // Perception & event flags
+    const peer_gap = computePeerGap(rt, all);
+    const flags = rollFlags(rt);
+
+    // Streaks
+    if (flags.success_flag) { rt.successStreak = (rt.successStreak ?? 0) + 1; rt.failureStreak = 0; }
+    else if (flags.failure_flag) { rt.failureStreak = (rt.failureStreak ?? 0) + 1; rt.successStreak = 0; }
+
+    const success_streak = rt.successStreak ?? 0;
+    const failure_streak = rt.failureStreak ?? 0;
+
+    // === Core state updates (per spec ordering) ===
+    const progress = c.consistency * (0.6 + 0.4 * c.momentum);
+
+    c.reputation = clamp01(c.reputation + 0.2 * progress + 0.1 * flags.signal_boost);
+
+    c.opportunity_access = clamp01(
+      c.opportunity_access + 0.25 * (c.consistency * c.reputation > 0.4 ? 1 : 0) + 0.15 * mentor_flag
+    );
+
+    c.self_worth = clamp01(
+      c.self_worth + 0.25 * progress - 0.3 * Math.max(peer_gap, 0)
+      + 0.15 * flags.social_feedback - 0.2 * flags.failure_flag
+    );
+
+    // Anxiety: peer_gap + event_driven, dampened by success
+    c.anxiety = clamp01(
+      c.anxiety + 0.4 * Math.max(peer_gap, 0) + 0.3 * flags.event_driven - 0.2 * flags.success_flag
+    );
+
+    // Momentum
+    c.momentum = clamp01(
+      c.momentum + 0.2 * success_streak - 0.25 * failure_streak - 0.1 * c.momentum * c.momentum
+    );
+
+    // Fragility / energy / lock-in / learning_rate / consistency drift
+    c.fragility_index = clamp01(c.fragility_index + 0.05 * flags.failure_flag - 0.04 * flags.success_flag + 0.02 * tp);
+    c.energy = clamp01(c.energy - 0.05 * tp - 0.04 * c.anxiety + 0.05 * flags.success_flag);
+    c.lock_in = clamp01(c.lock_in + 0.04 * c.consistency * (1 - peer_gap));
+    c.learning_rate = clamp01(c.learning_rate + 0.02 * flags.success_flag - 0.02 * flags.failure_flag);
+    c.consistency = clamp01(c.consistency + 0.03 * c.momentum - 0.05 * flags.failure_flag - 0.03 * (rt.cascade ? 1 : 0));
+
+    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4)
+    if (failure_streak >= 3 && c.self_worth < 0.4) {
+      rt.cascade = true;
+      events.push({ agentId: rt.agentId, kind: "cascade", description: `${name} entered a failure cascade.` });
+    }
+    if (rt.cascade) {
+      c.consistency = clamp01(c.consistency - 0.05);
+      c.anxiety = clamp01(c.anxiety + 0.05);
+    }
+
+    // Recovery
+    if (flags.success_flag || mentor_flag) {
+      rt.failureStreak = 0;
+      if (rt.cascade) events.push({ agentId: rt.agentId, kind: "recovery", description: `${name} broke the cascade.` });
+      rt.cascade = false;
+      c.momentum = clamp01(c.momentum + 0.3);
+      c.self_worth = clamp01(c.self_worth + 0.15);
+    }
+
+    // Influence: small reputation contagion from leader
+    const leaderRep = Math.max(...all.map((r) => r.core?.reputation ?? 0));
+    if (leaderRep > c.reputation + 0.2) {
+      c.reputation = clamp01(c.reputation + 0.02);
+    }
+
+    // Identity conflict: distance between current self_worth and reputation
+    const id_conflict = Math.abs(c.self_worth - c.reputation);
+    rt.identity_conflict = clamp01((rt.identity_conflict ?? 0) * 0.6 + id_conflict * 0.4);
+
+    // Custom variable rules (each affects ONE core var, scaled mildly)
+    if (rt.customVars) {
+      for (const cv of rt.customVars) {
+        const range = Math.max(1e-6, cv.max - cv.min);
+        const norm = clamp01((cv.value - cv.min) / range);
+        // signed nudge: above midpoint = +, below = -
+        const nudge = (norm - 0.5) * 0.06;
+        c[cv.affects] = clamp01(c[cv.affects] + nudge);
+      }
+    }
+
+    // Mode (v5)
+    rt.modeV5 =
+      c.fragility_index > 0.75 && c.self_worth < 0.3 ? "collapse" :
+      rt.cascade ? "fragile" :
+      c.self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
+      c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
+
+    rt.core = c;
+  }
+
+  return events;
+}
+
+// Telemetry helpers for v5
+export function v5Telemetry(rt: AgentRuntime) {
+  const c = rt.core ?? defaultCore();
+  return {
+    momentum: c.momentum,
+    cascade: !!rt.cascade,
+    fragility: c.fragility_index,
+    mode: rt.modeV5 ?? "steady",
+    timePressure: rt.timePressure ?? 0,
+    identityConflict: rt.identity_conflict ?? 0,
+    customVars: rt.customVars ?? [],
+  };
+}
+

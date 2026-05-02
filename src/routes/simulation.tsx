@@ -27,8 +27,15 @@ import {
   pathLockWarning,
   planningExecutionHint,
   successScore,
+  applyV5Round,
+  v5Telemetry,
 } from "@/lib/nyx-causal";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
+
+function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
+  if (!runtime) return false;
+  return Object.values(runtime).some((rt) => !!rt.core);
+}
 
 export const Route = createFileRoute("/simulation")({
   head: () => ({
@@ -74,24 +81,28 @@ function SimulationPage() {
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
-      runtime = Object.fromEntries(
-        Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
-      );
-      preEvents = rollRandomEvents(runtime, i);
-      const regression = rollRegressionEvent(runtime, i);
-      if (regression) preEvents.push(regression);
-      const opps = rollOpportunities(runtime, i);
-      for (const o of opps) {
-        preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
-        // v4 — internships trigger network multipliers
-        if (o.card.kind === "internship" || o.card.kind === "partnership") {
-          applyNetworkMultiplier(runtime, o.agentId);
+      if (hasV5(runtime)) {
+        // v5 — seed-based core engine
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS);
+      } else {
+        // v3/v4 fallback (toggle on but no seed-init yet)
+        runtime = Object.fromEntries(
+          Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
+        );
+        preEvents = rollRandomEvents(runtime, i);
+        const regression = rollRegressionEvent(runtime, i);
+        if (regression) preEvents.push(regression);
+        const opps = rollOpportunities(runtime, i);
+        for (const o of opps) {
+          preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+          if (o.card.kind === "internship" || o.card.kind === "partnership") {
+            applyNetworkMultiplier(runtime, o.agentId);
+          }
         }
-      }
-      // v4 — micro-failures (rejections, bad feedback, signal reversals)
-      const microFailures = rollMicroFailures(runtime, i);
-      for (const mf of microFailures) {
-        preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
+        const microFailures = rollMicroFailures(runtime, i);
+        for (const mf of microFailures) {
+          preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
+        }
       }
     }
 
@@ -136,11 +147,15 @@ function SimulationPage() {
     // ---- Advanced causal post-round ----
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
     if (sim.advanced && runtime) {
-      runtime = applyRoundFeedback(runtime, combinedFeed, i);
-      // v4 — action→outcome pipeline + competition ranking
-      processRoundOutcomes(runtime, combinedFeed, i);
-      applyCompetitionRanking(runtime);
-      stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      if (hasV5(runtime)) {
+        // v5: state already advanced in pre-round; just snapshot
+        stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      } else {
+        runtime = applyRoundFeedback(runtime, combinedFeed, i);
+        processRoundOutcomes(runtime, combinedFeed, i);
+        applyCompetitionRanking(runtime);
+        stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      }
     }
 
     const round: Round = {
@@ -253,8 +268,65 @@ function SimulationPage() {
         </div>
       )}
 
-      {/* v4 — Competition Ranking */}
-      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+      {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Advanced Telemetry · v5
+            </div>
+            <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-secondary-foreground">
+              Causal
+            </span>
+          </div>
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {Object.values(sim.runtime).map((rt) => {
+              const t = v5Telemetry(rt);
+              const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+              const modeColor =
+                t.mode === "collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
+                t.mode === "fragile" ? "bg-[oklch(0.94_0.05_25)] text-primary" :
+                t.mode === "growth" ? "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]" :
+                t.mode === "recovery" ? "bg-[oklch(0.92_0.04_70)] text-primary" :
+                "bg-secondary/60 text-secondary-foreground";
+              return (
+                <div key={rt.agentId} className="rounded-2xl bg-white/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>{a?.avatar}</span>
+                      <span className="truncate text-xs font-semibold">{a?.name}</span>
+                    </div>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", modeColor)}>
+                      {t.mode}
+                    </span>
+                  </div>
+                  {t.cascade && (
+                    <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.06_25)] px-2 py-1 text-[10px] font-medium text-primary">
+                      ⚠ Cascade active — withdrawal compounding
+                    </div>
+                  )}
+                  <V5Bar label="Momentum" v={t.momentum} tone="primary" />
+                  <V5Bar label="Fragility" v={t.fragility} tone={t.fragility > 0.6 ? "warn" : "muted"} />
+                  <V5Bar label="Identity Conflict" v={t.identityConflict} tone={t.identityConflict > 0.4 ? "warn" : "muted"} />
+                  <V5Bar label="Time Pressure" v={t.timePressure} tone="muted" />
+                  {t.customVars.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {t.customVars.map((cv, idx) => (
+                        <span key={idx} className="rounded-full bg-secondary/60 px-1.5 py-0.5 text-[9px] font-mono text-secondary-foreground">
+                          {cv.name} {cv.value.toFixed(2)} → {cv.affects}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* v4 — Competition Ranking (legacy, only when no v5 init) */}
+      {sim?.advanced && sim.runtime && !hasV5(sim.runtime) && Object.keys(sim.runtime).length > 0 && (
         <div className="glass rounded-[22px] p-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary">
             Competition Ranking
@@ -283,8 +355,8 @@ function SimulationPage() {
         </div>
       )}
 
-      {/* Advanced state panel */}
-      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+      {/* Advanced state panel (legacy v3/v4 — hidden when v5 active) */}
+      {sim?.advanced && sim.runtime && !hasV5(sim.runtime) && Object.keys(sim.runtime).length > 0 && (
         <div className="glass rounded-[22px] p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
@@ -480,6 +552,23 @@ function actionBadge(action: string) {
     WITHDRAW: "bg-[oklch(0.92_0.05_25)] text-primary",
   };
   return map[action] ?? "bg-muted text-muted-foreground";
+}
+
+function V5Bar({ label, v, tone }: { label: string; v: number; tone: "primary" | "warn" | "muted" }) {
+  const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+  const fill =
+    tone === "warn" ? "bg-[oklch(0.78_0.12_25)]" :
+    tone === "primary" ? "gradient-rose" :
+    "bg-muted-foreground/40";
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-[10px]">
+      <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full transition-all", fill)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-8 text-right font-mono tabular-nums">{pct}</span>
+    </div>
+  );
 }
 
 function StateChip({ label, v }: { label: string; v: number }) {

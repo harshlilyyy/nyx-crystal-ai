@@ -80,7 +80,7 @@ function SetupPage() {
     nav({ to: "/agents" });
   }
 
-  function toggleAdvanced(v: boolean) {
+  async function toggleAdvanced(v: boolean) {
     if (!sim) return;
     const next: Simulation = {
       ...sim,
@@ -89,6 +89,37 @@ function SetupPage() {
     };
     setSim(next);
     saveSimulation(next);
+    if (v && next.seed.trim() && next.agentIds.length > 0) {
+      await initAdvancedFromSeed(next);
+    }
+  }
+
+  async function initAdvancedFromSeed(s: Simulation) {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: { task: "init_advanced", seed: s.seed, agentIds: s.agentIds },
+      });
+      if (error) throw error;
+      const extracted = (data?.extracted ?? {}) as Record<string, { core?: Record<string, number>; custom?: unknown[] }>;
+      const { applyExtractedInit } = await import("@/lib/nyx-causal");
+      const { NYX_AGENTS } = await import("@/lib/nyx-agents");
+      const baseRuntime = s.runtime ?? initRuntime(s.agentIds);
+      const agentMap: Record<string, string> = {};
+      for (const id of s.agentIds) {
+        const a = NYX_AGENTS.find((x) => x.id === id);
+        if (a) agentMap[id] = a.name;
+      }
+      const runtime = applyExtractedInit(baseRuntime, extracted as Parameters<typeof applyExtractedInit>[1], agentMap);
+      const next = { ...s, advanced: true, runtime };
+      setSim(next);
+      saveSimulation(next);
+      toast.success("Advanced state initialized from seed");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to initialize advanced state");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -111,6 +142,25 @@ function SetupPage() {
           </div>
           <Switch checked={!!sim?.advanced} onCheckedChange={toggleAdvanced} />
         </div>
+        {sim?.advanced && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2">
+            <div className="text-[11px] leading-snug text-muted-foreground">
+              {sim.agentIds.length > 0
+                ? "Initialize 10-variable agent state from your scenario."
+                : "Pick agents first, then re-initialize from seed."}
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={loading || !sim.seed.trim() || sim.agentIds.length === 0}
+              onClick={() => initAdvancedFromSeed(sim)}
+              className="rounded-full text-xs"
+            >
+              {loading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Re-initialize
+            </Button>
+          </div>
+        )}
       </div>
 
       {step === 1 && (
