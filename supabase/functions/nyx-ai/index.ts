@@ -131,6 +131,105 @@ Deno.serve(async (req) => {
       return Response.json(out, { headers: corsHeaders });
     }
 
+    if (task === "init_advanced") {
+      const ids = (payload.agentIds as string[]) ?? [];
+      const agents = ids.map((id) => ({ id, ...NYX_AGENTS[id] })).filter((a) => a.name);
+      const agentNames = agents.map((a) => a.name);
+      const seed = payload.seed as string;
+
+      const coreSchema = {
+        type: "object",
+        properties: {
+          self_worth: { type: "number", minimum: 0, maximum: 1 },
+          anxiety: { type: "number", minimum: 0, maximum: 1 },
+          consistency: { type: "number", minimum: 0, maximum: 1 },
+          momentum: { type: "number", minimum: 0, maximum: 1 },
+          reputation: { type: "number", minimum: 0, maximum: 1 },
+          opportunity_access: { type: "number", minimum: 0, maximum: 1 },
+          fragility_index: { type: "number", minimum: 0, maximum: 1 },
+          lock_in: { type: "number", minimum: 0, maximum: 1 },
+          learning_rate: { type: "number", minimum: 0, maximum: 1 },
+          energy: { type: "number", minimum: 0, maximum: 1 },
+        },
+        required: [
+          "self_worth", "anxiety", "consistency", "momentum", "reputation",
+          "opportunity_access", "fragility_index", "lock_in", "learning_rate", "energy",
+        ],
+      };
+
+      const customSchema = {
+        type: "array",
+        maxItems: 3,
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            value: { type: "number" },
+            min: { type: "number" },
+            max: { type: "number" },
+            affects: {
+              type: "string",
+              enum: [
+                "self_worth", "anxiety", "consistency", "momentum", "reputation",
+                "opportunity_access", "fragility_index", "lock_in", "learning_rate", "energy",
+              ],
+            },
+          },
+          required: ["name", "value", "min", "max", "affects"],
+        },
+      };
+
+      const sys =
+        "You initialize realistic numeric agent state for a causal simulation. Output strict JSON via the tool. Base values on the scenario (e.g. a failed student → low self_worth, high anxiety; a supportive parent → high consistency, moderate expectations). All core values must be in 0..1.";
+      const user =
+        `Analyze the following scenario and extract initial state for these agents: ${JSON.stringify(agentNames)}.\n\nFor EACH agent name above, return: a "core" object with the 10 required variables (all 0..1), plus up to 3 scenario-specific "custom" variables (each with name, value, range min/max, and which ONE core variable it affects). Base values realistically on the scenario.\n\nScenario:\n${seed}`;
+
+      const params = {
+        type: "object",
+        properties: {
+          agents: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                core: coreSchema,
+                custom: customSchema,
+              },
+              required: ["name", "core"],
+            },
+          },
+        },
+        required: ["agents"],
+      };
+
+      let raw = await structured(user, sys, "init_advanced", params);
+      // retry once if missing/invalid
+      const isValid = (r: Record<string, unknown>) => {
+        const arr = (r as { agents?: unknown[] }).agents;
+        if (!Array.isArray(arr) || arr.length === 0) return false;
+        for (const a of arr) {
+          const ag = a as { name?: string; core?: Record<string, unknown> };
+          if (!ag.name || !ag.core) return false;
+          for (const k of ["self_worth","anxiety","consistency","momentum","reputation","opportunity_access","fragility_index","lock_in","learning_rate","energy"]) {
+            const v = ag.core[k];
+            if (typeof v !== "number" || v < 0 || v > 1) return false;
+          }
+        }
+        return true;
+      };
+      if (!isValid(raw)) {
+        raw = await structured(user, sys, "init_advanced", params);
+      }
+      // Reshape to { [agentName]: { core, custom } }
+      const arr = (raw as { agents?: { name: string; core: Record<string, number>; custom?: unknown[] }[] }).agents ?? [];
+      const out: Record<string, { core: Record<string, number>; custom: unknown[] }> = {};
+      for (const a of arr) {
+        out[a.name] = { core: a.core, custom: a.custom ?? [] };
+      }
+      return Response.json({ extracted: out, valid: isValid(raw) }, { headers: corsHeaders });
+    }
+
     if (task === "round") {
       const ids = payload.agentIds as string[];
       const agents = ids.map((id) => ({ id, ...NYX_AGENTS[id] })).filter((a) => a.name);
