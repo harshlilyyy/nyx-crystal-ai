@@ -554,6 +554,23 @@ function actionBadge(action: string) {
   return map[action] ?? "bg-muted text-muted-foreground";
 }
 
+function V5Bar({ label, v, tone }: { label: string; v: number; tone: "primary" | "warn" | "muted" }) {
+  const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+  const fill =
+    tone === "warn" ? "bg-[oklch(0.78_0.12_25)]" :
+    tone === "primary" ? "gradient-rose" :
+    "bg-muted-foreground/40";
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-[10px]">
+      <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full transition-all", fill)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-8 text-right font-mono tabular-nums">{pct}</span>
+    </div>
+  );
+}
+
 function StateChip({ label, v }: { label: string; v: number }) {
   const positive = v >= 0;
   return (
