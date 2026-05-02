@@ -80,7 +80,7 @@ function SetupPage() {
     nav({ to: "/agents" });
   }
 
-  function toggleAdvanced(v: boolean) {
+  async function toggleAdvanced(v: boolean) {
     if (!sim) return;
     const next: Simulation = {
       ...sim,
@@ -89,6 +89,37 @@ function SetupPage() {
     };
     setSim(next);
     saveSimulation(next);
+    if (v && next.seed.trim() && next.agentIds.length > 0) {
+      await initAdvancedFromSeed(next);
+    }
+  }
+
+  async function initAdvancedFromSeed(s: Simulation) {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: { task: "init_advanced", seed: s.seed, agentIds: s.agentIds },
+      });
+      if (error) throw error;
+      const extracted = (data?.extracted ?? {}) as Record<string, { core?: Record<string, number>; custom?: unknown[] }>;
+      const { applyExtractedInit } = await import("@/lib/nyx-causal");
+      const { NYX_AGENTS } = await import("@/lib/nyx-agents");
+      const baseRuntime = s.runtime ?? initRuntime(s.agentIds);
+      const agentMap: Record<string, string> = {};
+      for (const id of s.agentIds) {
+        const a = NYX_AGENTS.find((x) => x.id === id);
+        if (a) agentMap[id] = a.name;
+      }
+      const runtime = applyExtractedInit(baseRuntime, extracted as Parameters<typeof applyExtractedInit>[1], agentMap);
+      const next = { ...s, advanced: true, runtime };
+      setSim(next);
+      saveSimulation(next);
+      toast.success("Advanced state initialized from seed");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to initialize advanced state");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
