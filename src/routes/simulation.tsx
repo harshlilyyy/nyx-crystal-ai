@@ -268,8 +268,65 @@ function SimulationPage() {
         </div>
       )}
 
-      {/* v4 — Competition Ranking */}
-      {sim?.advanced && sim.runtime && Object.keys(sim.runtime).length > 0 && (
+      {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Advanced Telemetry · v5
+            </div>
+            <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-secondary-foreground">
+              Causal
+            </span>
+          </div>
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {Object.values(sim.runtime).map((rt) => {
+              const t = v5Telemetry(rt);
+              const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
+              const modeColor =
+                t.mode === "collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
+                t.mode === "fragile" ? "bg-[oklch(0.94_0.05_25)] text-primary" :
+                t.mode === "growth" ? "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]" :
+                t.mode === "recovery" ? "bg-[oklch(0.92_0.04_70)] text-primary" :
+                "bg-secondary/60 text-secondary-foreground";
+              return (
+                <div key={rt.agentId} className="rounded-2xl bg-white/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>{a?.avatar}</span>
+                      <span className="truncate text-xs font-semibold">{a?.name}</span>
+                    </div>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", modeColor)}>
+                      {t.mode}
+                    </span>
+                  </div>
+                  {t.cascade && (
+                    <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.06_25)] px-2 py-1 text-[10px] font-medium text-primary">
+                      ⚠ Cascade active — withdrawal compounding
+                    </div>
+                  )}
+                  <V5Bar label="Momentum" v={t.momentum} tone="primary" />
+                  <V5Bar label="Fragility" v={t.fragility} tone={t.fragility > 0.6 ? "warn" : "muted"} />
+                  <V5Bar label="Identity Conflict" v={t.identityConflict} tone={t.identityConflict > 0.4 ? "warn" : "muted"} />
+                  <V5Bar label="Time Pressure" v={t.timePressure} tone="muted" />
+                  {t.customVars.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {t.customVars.map((cv, idx) => (
+                        <span key={idx} className="rounded-full bg-secondary/60 px-1.5 py-0.5 text-[9px] font-mono text-secondary-foreground">
+                          {cv.name} {cv.value.toFixed(2)} → {cv.affects}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* v4 — Competition Ranking (legacy, only when no v5 init) */}
+      {sim?.advanced && sim.runtime && !hasV5(sim.runtime) && Object.keys(sim.runtime).length > 0 && (
         <div className="glass rounded-[22px] p-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary">
             Competition Ranking
