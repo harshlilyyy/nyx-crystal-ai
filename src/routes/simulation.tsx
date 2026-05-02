@@ -81,24 +81,28 @@ function SimulationPage() {
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
-      runtime = Object.fromEntries(
-        Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
-      );
-      preEvents = rollRandomEvents(runtime, i);
-      const regression = rollRegressionEvent(runtime, i);
-      if (regression) preEvents.push(regression);
-      const opps = rollOpportunities(runtime, i);
-      for (const o of opps) {
-        preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
-        // v4 — internships trigger network multipliers
-        if (o.card.kind === "internship" || o.card.kind === "partnership") {
-          applyNetworkMultiplier(runtime, o.agentId);
+      if (hasV5(runtime)) {
+        // v5 — seed-based core engine
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS);
+      } else {
+        // v3/v4 fallback (toggle on but no seed-init yet)
+        runtime = Object.fromEntries(
+          Object.entries(runtime).map(([id, rt]) => [id, applyTransitions(rt)])
+        );
+        preEvents = rollRandomEvents(runtime, i);
+        const regression = rollRegressionEvent(runtime, i);
+        if (regression) preEvents.push(regression);
+        const opps = rollOpportunities(runtime, i);
+        for (const o of opps) {
+          preEvents.push({ agentId: o.agentId, kind: `opportunity_${o.card.kind}`, description: o.card.description });
+          if (o.card.kind === "internship" || o.card.kind === "partnership") {
+            applyNetworkMultiplier(runtime, o.agentId);
+          }
         }
-      }
-      // v4 — micro-failures (rejections, bad feedback, signal reversals)
-      const microFailures = rollMicroFailures(runtime, i);
-      for (const mf of microFailures) {
-        preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
+        const microFailures = rollMicroFailures(runtime, i);
+        for (const mf of microFailures) {
+          preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
+        }
       }
     }
 
