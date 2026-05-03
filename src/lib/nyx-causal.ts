@@ -1002,7 +1002,12 @@ export function applyV5Round(
     }
 
     // Perception & event flags
-    const peer_gap = computePeerGap(rt, all);
+    const existenceEdges = computeExistenceMatrix(runtime).filter((edge) => edge.from === rt.agentId);
+    const avgExistenceValue = existenceEdges.length
+      ? existenceEdges.reduce((sum, edge) => sum + edge.existence_value, 0) / existenceEdges.length
+      : 0.5;
+    const perceptionBias = 1 + (rt.selfPerceptionBias ?? c.anxiety * 0.5);
+    const peer_gap = computePeerGap(rt, all, avgExistenceValue, perceptionBias);
     const flags = rollFlags(rt);
 
     // Streaks
