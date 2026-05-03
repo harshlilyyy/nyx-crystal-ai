@@ -1065,11 +1065,30 @@ export function applyV5Round(
       }
     }
 
-    // Mode (v5)
+    // Emotional anchor — persistent attachment effects (v6.1)
+    const prevSelfWorth = rt.core.self_worth;
+    if (rt.emotionalAnchor) {
+      const ea = rt.emotionalAnchor;
+      c.self_worth = clamp01(c.self_worth + 0.05 * ea.intensity * ea.valence);
+      c.anxiety = clamp01(c.anxiety + 0.05 * ea.intensity * Math.abs(ea.valence));
+      // Closure trigger: significant positive shift in self_worth resets intensity
+      if (c.self_worth - prevSelfWorth > 0.15) {
+        ea.intensity = 1; // closure event "resets" (re-anchors at full)
+        events.push({ agentId: rt.agentId, kind: "closure", description: `${name} reaches closure with ${ea.name}.` });
+      } else {
+        ea.intensity = clamp01(ea.intensity * 0.95);
+      }
+    }
+
+    // Self-perception bias (v6.1) — distorted self-view under stress
+    rt.selfPerceptionBias = c.anxiety * 0.5;
+    const effective_self_worth = c.self_worth * (1 - rt.selfPerceptionBias);
+
+    // Mode (v5) — uses effective_self_worth (biased perception)
     rt.modeV5 =
-      c.fragility_index > 0.75 && c.self_worth < 0.3 ? "collapse" :
+      c.fragility_index > 0.75 && effective_self_worth < 0.3 ? "collapse" :
       rt.cascade ? "fragile" :
-      c.self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
+      effective_self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
     rt.core = c;
