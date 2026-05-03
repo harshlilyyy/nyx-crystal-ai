@@ -231,10 +231,10 @@ Deno.serve(async (req) => {
         raw = await structured(user, sys, "init_advanced", params);
       }
       // Reshape to { [agentName]: { core, custom } }
-      const arr = (raw as { agents?: { name: string; core: Record<string, number>; custom?: unknown[] }[] }).agents ?? [];
-      const out: Record<string, { core: Record<string, number>; custom: unknown[] }> = {};
+      const arr = (raw as { agents?: { name: string; core: Record<string, number>; custom?: unknown[]; emotionalAnchor?: { name: string; intensity: number; valence: number } }[] }).agents ?? [];
+      const out: Record<string, { core: Record<string, number>; custom: unknown[]; emotionalAnchor?: { name: string; intensity: number; valence: number } }> = {};
       for (const a of arr) {
-        out[a.name] = { core: a.core, custom: a.custom ?? [] };
+        out[a.name] = { core: a.core, custom: a.custom ?? [], emotionalAnchor: a.emotionalAnchor };
       }
       return Response.json({ extracted: out, valid: isValid(raw) }, { headers: corsHeaders });
     }
