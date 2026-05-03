@@ -120,6 +120,7 @@ export interface CoreState {
   lock_in: number;
   learning_rate: number;
   energy: number;
+  phenomenological_penetration: number; // 11th — perceived relevance gating (0..1)
 }
 
 export type CoreVar = keyof CoreState;
