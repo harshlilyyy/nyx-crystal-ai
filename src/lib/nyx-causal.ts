@@ -922,6 +922,15 @@ export function applyExtractedInit(
     rt.identity_conflict = 0;
     rt.timePressure = 0;
     rt.modeV5 = "steady";
+    if (found.emotionalAnchor && typeof found.emotionalAnchor.name === "string") {
+      const ea = found.emotionalAnchor;
+      rt.emotionalAnchor = {
+        name: ea.name,
+        intensity: clamp01(ea.intensity ?? 0.5),
+        valence: Math.max(-1, Math.min(1, ea.valence ?? 0)),
+      };
+    }
+    rt.selfPerceptionBias = 0;
   }
   return next;
 }
