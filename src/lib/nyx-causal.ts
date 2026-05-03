@@ -1117,6 +1117,8 @@ export function v5Telemetry(rt: AgentRuntime) {
     timePressure: rt.timePressure ?? 0,
     identityConflict: rt.identity_conflict ?? 0,
     customVars: rt.customVars ?? [],
+    emotionalAnchor: rt.emotionalAnchor,
+    selfPerceptionBias: rt.selfPerceptionBias ?? 0,
   };
 }
 
