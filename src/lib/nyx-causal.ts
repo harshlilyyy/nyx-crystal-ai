@@ -881,6 +881,7 @@ export function validateCorePayload(raw: unknown): { ok: boolean; reason?: strin
     const v = val as Record<string, unknown>;
     const core = (v.core ?? v.state ?? v) as Record<string, unknown>;
     for (const k of CORE_KEYS) {
+      if (k === "phenomenological_penetration") continue; // optional from seed
       const n = core[k];
       if (typeof n !== "number" || Number.isNaN(n) || n < 0 || n > 1) {
         return { ok: false, reason: `${name}.${k} invalid (${n})` };
