@@ -164,6 +164,9 @@ export interface AgentRuntime {
   identity_conflict?: number; // 0..1
   timePressure?: number;  // 0..1, grows by round
   modeV5?: "growth" | "recovery" | "fragile" | "collapse" | "steady";
+  // v6.1 — emotional realism
+  emotionalAnchor?: EmotionalAnchor;
+  selfPerceptionBias?: number; // derived: anxiety * 0.5
 }
 
 export interface ActiveLoop {
