@@ -847,6 +847,7 @@ import type { CoreState, CoreVar, CustomVariable } from "./nyx-types";
 const CORE_KEYS: CoreVar[] = [
   "self_worth", "anxiety", "consistency", "momentum", "reputation",
   "opportunity_access", "fragility_index", "lock_in", "learning_rate", "energy",
+  "phenomenological_penetration",
 ];
 
 export function isCoreVar(k: string): k is CoreVar {
@@ -858,6 +859,7 @@ export function defaultCore(): CoreState {
     self_worth: 0.5, anxiety: 0.3, consistency: 0.5, momentum: 0.5,
     reputation: 0.4, opportunity_access: 0.5, fragility_index: 0.3,
     lock_in: 0.2, learning_rate: 0.5, energy: 0.6,
+    phenomenological_penetration: 0.5,
   };
 }
 
