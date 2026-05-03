@@ -1031,6 +1031,7 @@ export function applyV5Round(
     c.self_worth = clamp01(
       c.self_worth + 0.25 * progress - 0.3 * Math.max(peer_gap, 0)
       + 0.15 * flags.social_feedback - 0.2 * flags.failure_flag
+      + 0.1 * Math.max(effectiveInfluence, 0)
     );
 
     // Anxiety: peer_gap + event_driven, dampened by success
