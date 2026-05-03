@@ -892,7 +892,7 @@ export function validateCorePayload(raw: unknown): { ok: boolean; reason?: strin
 // agentMap: { agentId -> agentName }. Falls back gracefully.
 export function applyExtractedInit(
   runtime: Record<string, AgentRuntime>,
-  extracted: Record<string, { core?: Partial<CoreState>; state?: Partial<CoreState>; custom?: CustomVariable[]; customVariables?: CustomVariable[] }>,
+  extracted: Record<string, { core?: Partial<CoreState>; state?: Partial<CoreState>; custom?: CustomVariable[]; customVariables?: CustomVariable[]; emotionalAnchor?: { name: string; intensity: number; valence: number } }>,
   agentMap: Record<string, string>
 ): Record<string, AgentRuntime> {
   const lower = Object.fromEntries(
