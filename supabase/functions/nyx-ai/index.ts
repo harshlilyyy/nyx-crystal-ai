@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
       };
 
       const sys =
-        "You initialize realistic numeric agent state for a causal simulation. Output strict JSON via the tool. Base values on the scenario (e.g. a failed student → low self_worth, high anxiety; a supportive parent → high consistency, moderate expectations). All core values must be in 0..1.";
+        "You initialize realistic numeric agent state for a causal simulation. Output strict JSON via the tool. Base values on the scenario (e.g. a failed student → low self_worth, high anxiety; a supportive parent → high consistency, moderate expectations). All core values must be in 0..1. If the scenario describes a deep attachment (a person, loss, relationship, lost dream), include an optional emotionalAnchor for that agent: { name, intensity (0..1), valence (-1..1, negative = painful loss / positive = sustaining bond) }.";
       const user =
         `Analyze the following scenario and extract initial state for these agents: ${JSON.stringify(agentNames)}.\n\nFor EACH agent name above, return: a "core" object with the 10 required variables (all 0..1), plus up to 3 scenario-specific "custom" variables (each with name, value, range min/max, and which ONE core variable it affects). Base values realistically on the scenario.\n\nScenario:\n${seed}`;
 
