@@ -938,13 +938,19 @@ export function applyExtractedInit(
   return next;
 }
 
-// Compute peer_gap: how far this agent's reputation lags the visible leader.
-function computePeerGap(rt: AgentRuntime, all: AgentRuntime[]): number {
+// Compute perceived peer_gap using the relevance-weighted existence layer.
+function computePeerGap(
+  rt: AgentRuntime,
+  all: AgentRuntime[],
+  avgExistenceValue: number,
+  perceptionBias: number
+): number {
   if (!rt.core) return 0;
-  // perception distortion: agents see leader's reputation amplified by ~10%
-  const visible = all.map((r) => (r.core?.reputation ?? 0) * 1.1);
-  const top = Math.max(...visible);
-  const gap = top - rt.core.reputation;
+  const meanVisibleReputation =
+    all.reduce((sum, r) => sum + ((r.core?.reputation ?? 0) * 1.1), 0) / Math.max(1, all.length);
+  const ownReputation = rt.core.reputation;
+  const relevanceFactor = 1 + 0.5 * (1 - avgExistenceValue);
+  const gap = (meanVisibleReputation - ownReputation) * perceptionBias * relevanceFactor;
   return clamp01(gap);
 }
 
@@ -976,6 +982,7 @@ export function applyV5Round(
 ): { agentId: string; kind: string; description: string }[] {
   const all = Object.values(runtime);
   const events: { agentId: string; kind: string; description: string }[] = [];
+  const existenceMatrix = computeExistenceMatrix(runtime);
 
   // global time pressure (grows linearly toward 1.0 by final round)
   const tp = clamp01((roundIndex + 1) / Math.max(1, totalRounds));
@@ -996,7 +1003,13 @@ export function applyV5Round(
     }
 
     // Perception & event flags
-    const peer_gap = computePeerGap(rt, all);
+    const existenceEdges = existenceMatrix.filter((edge) => edge.from === rt.agentId);
+    const avgExistenceValue = existenceEdges.length
+      ? existenceEdges.reduce((sum, edge) => sum + edge.existence_value, 0) / existenceEdges.length
+      : 0.5;
+    const perceptionBias = 1 + (rt.selfPerceptionBias ?? c.anxiety * 0.5);
+    const peer_gap = computePeerGap(rt, all, avgExistenceValue, perceptionBias);
+    const effectiveInfluence = existenceEdges.reduce((max, edge) => Math.max(max, edge.existence_value), 0);
     const flags = rollFlags(rt);
 
     // Streaks
@@ -1018,6 +1031,7 @@ export function applyV5Round(
     c.self_worth = clamp01(
       c.self_worth + 0.25 * progress - 0.3 * Math.max(peer_gap, 0)
       + 0.15 * flags.social_feedback - 0.2 * flags.failure_flag
+      + 0.1 * Math.max(effectiveInfluence, 0)
     );
 
     // Anxiety: peer_gap + event_driven, dampened by success
