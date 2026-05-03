@@ -124,6 +124,12 @@ export interface CoreState {
 
 export type CoreVar = keyof CoreState;
 
+export interface EmotionalAnchor {
+  name: string;
+  intensity: number; // 0..1
+  valence: number;   // -1..1
+}
+
 export interface CustomVariable {
   name: string;
   value: number;
