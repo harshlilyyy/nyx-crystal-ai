@@ -1103,10 +1103,45 @@ export function applyV5Round(
       effective_self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
+    // Phenomenological penetration update (11th core var)
+    c.phenomenological_penetration = clamp01(
+      (c.phenomenological_penetration ?? 0.5) + 0.1 * c.anxiety - 0.05 * c.consistency
+    );
+
     rt.core = c;
   }
 
   return events;
+}
+
+// Existence value matrix — directed pair influence weighting (v6.2 perceived relevance)
+export interface ExistenceEdge {
+  from: string; to: string;
+  causal_proximity: number;
+  scale_similarity: number;
+  existence_value: number;
+}
+
+export function computeExistenceMatrix(runtime: Record<string, AgentRuntime>): ExistenceEdge[] {
+  const ids = Object.keys(runtime);
+  const edges: ExistenceEdge[] = [];
+  for (const i of ids) {
+    const ci = runtime[i].core;
+    if (!ci) continue;
+    for (const j of ids) {
+      if (i === j) continue;
+      const cj = runtime[j].core;
+      if (!cj) continue;
+      const causal_proximity = cj.opportunity_access;
+      const scale_similarity = 1 - Math.abs(ci.opportunity_access - cj.opportunity_access);
+      const existence_value =
+        0.4 * causal_proximity +
+        0.35 * scale_similarity +
+        0.25 * (ci.phenomenological_penetration ?? 0.5);
+      edges.push({ from: i, to: j, causal_proximity, scale_similarity, existence_value: clamp01(existence_value) });
+    }
+  }
+  return edges;
 }
 
 // Telemetry helpers for v5
