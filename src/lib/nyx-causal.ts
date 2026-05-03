@@ -1157,6 +1157,7 @@ export function v5Telemetry(rt: AgentRuntime) {
     customVars: rt.customVars ?? [],
     emotionalAnchor: rt.emotionalAnchor,
     selfPerceptionBias: rt.selfPerceptionBias ?? 0,
+    phenomenologicalPenetration: c.phenomenological_penetration ?? 0.5,
   };
 }
 
