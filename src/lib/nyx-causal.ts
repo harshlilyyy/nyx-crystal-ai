@@ -938,13 +938,19 @@ export function applyExtractedInit(
   return next;
 }
 
-// Compute peer_gap: how far this agent's reputation lags the visible leader.
-function computePeerGap(rt: AgentRuntime, all: AgentRuntime[]): number {
+// Compute perceived peer_gap using the relevance-weighted existence layer.
+function computePeerGap(
+  rt: AgentRuntime,
+  all: AgentRuntime[],
+  avgExistenceValue: number,
+  perceptionBias: number
+): number {
   if (!rt.core) return 0;
-  // perception distortion: agents see leader's reputation amplified by ~10%
-  const visible = all.map((r) => (r.core?.reputation ?? 0) * 1.1);
-  const top = Math.max(...visible);
-  const gap = top - rt.core.reputation;
+  const meanVisibleReputation =
+    all.reduce((sum, r) => sum + ((r.core?.reputation ?? 0) * 1.1), 0) / Math.max(1, all.length);
+  const ownReputation = rt.core.reputation;
+  const relevanceFactor = 1 + 0.5 * (1 - avgExistenceValue);
+  const gap = (meanVisibleReputation - ownReputation) * perceptionBias * relevanceFactor;
   return clamp01(gap);
 }
 
