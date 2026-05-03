@@ -195,6 +195,15 @@ Deno.serve(async (req) => {
                 name: { type: "string" },
                 core: coreSchema,
                 custom: customSchema,
+                emotionalAnchor: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    intensity: { type: "number", minimum: 0, maximum: 1 },
+                    valence: { type: "number", minimum: -1, maximum: 1 },
+                  },
+                  required: ["name", "intensity", "valence"],
+                },
               },
               required: ["name", "core"],
             },
