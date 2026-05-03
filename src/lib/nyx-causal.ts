@@ -982,6 +982,7 @@ export function applyV5Round(
 ): { agentId: string; kind: string; description: string }[] {
   const all = Object.values(runtime);
   const events: { agentId: string; kind: string; description: string }[] = [];
+  const existenceMatrix = computeExistenceMatrix(runtime);
 
   // global time pressure (grows linearly toward 1.0 by final round)
   const tp = clamp01((roundIndex + 1) / Math.max(1, totalRounds));
