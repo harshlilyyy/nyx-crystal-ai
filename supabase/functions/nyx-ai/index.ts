@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
       };
 
       const sys =
-        "You initialize realistic numeric agent state for a causal simulation. Output strict JSON via the tool. Base values on the scenario (e.g. a failed student → low self_worth, high anxiety; a supportive parent → high consistency, moderate expectations). All core values must be in 0..1.";
+        "You initialize realistic numeric agent state for a causal simulation. Output strict JSON via the tool. Base values on the scenario (e.g. a failed student → low self_worth, high anxiety; a supportive parent → high consistency, moderate expectations). All core values must be in 0..1. If the scenario describes a deep attachment (a person, loss, relationship, lost dream), include an optional emotionalAnchor for that agent: { name, intensity (0..1), valence (-1..1, negative = painful loss / positive = sustaining bond) }.";
       const user =
         `Analyze the following scenario and extract initial state for these agents: ${JSON.stringify(agentNames)}.\n\nFor EACH agent name above, return: a "core" object with the 10 required variables (all 0..1), plus up to 3 scenario-specific "custom" variables (each with name, value, range min/max, and which ONE core variable it affects). Base values realistically on the scenario.\n\nScenario:\n${seed}`;
 
@@ -195,6 +195,15 @@ Deno.serve(async (req) => {
                 name: { type: "string" },
                 core: coreSchema,
                 custom: customSchema,
+                emotionalAnchor: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    intensity: { type: "number", minimum: 0, maximum: 1 },
+                    valence: { type: "number", minimum: -1, maximum: 1 },
+                  },
+                  required: ["name", "intensity", "valence"],
+                },
               },
               required: ["name", "core"],
             },
@@ -222,10 +231,10 @@ Deno.serve(async (req) => {
         raw = await structured(user, sys, "init_advanced", params);
       }
       // Reshape to { [agentName]: { core, custom } }
-      const arr = (raw as { agents?: { name: string; core: Record<string, number>; custom?: unknown[] }[] }).agents ?? [];
-      const out: Record<string, { core: Record<string, number>; custom: unknown[] }> = {};
+      const arr = (raw as { agents?: { name: string; core: Record<string, number>; custom?: unknown[]; emotionalAnchor?: { name: string; intensity: number; valence: number } }[] }).agents ?? [];
+      const out: Record<string, { core: Record<string, number>; custom: unknown[]; emotionalAnchor?: { name: string; intensity: number; valence: number } }> = {};
       for (const a of arr) {
-        out[a.name] = { core: a.core, custom: a.custom ?? [] };
+        out[a.name] = { core: a.core, custom: a.custom ?? [], emotionalAnchor: a.emotionalAnchor };
       }
       return Response.json({ extracted: out, valid: isValid(raw) }, { headers: corsHeaders });
     }
