@@ -315,6 +315,14 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* Past-run insight (advanced only) */}
+      {sim?.advanced && sim.pastInsight && (
+        <div className="glass rounded-[22px] p-3 ring-1 ring-[oklch(0.92_0.04_70)]">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Past-run insight</div>
+          <p className="mt-1 text-xs leading-snug text-muted-foreground">{sim.pastInsight}</p>
+        </div>
+      )}
+
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
