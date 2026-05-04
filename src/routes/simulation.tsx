@@ -286,6 +286,8 @@ function SimulationPage() {
               const modeColor =
                 t.mode === "collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
                 t.mode === "fragile" ? "bg-[oklch(0.94_0.05_25)] text-primary" :
+                t.mode === "spike" ? "bg-[oklch(0.92_0.07_55)] text-primary" :
+                t.mode === "avoid" ? "bg-[oklch(0.93_0.04_300)] text-primary" :
                 t.mode === "growth" ? "bg-[oklch(0.9_0.05_180)] text-[oklch(0.4_0.06_180)]" :
                 t.mode === "recovery" ? "bg-[oklch(0.92_0.04_70)] text-primary" :
                 "bg-secondary/60 text-secondary-foreground";
