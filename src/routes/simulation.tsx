@@ -238,9 +238,26 @@ function SimulationPage() {
       if (sim.advanced) {
         const { analyzeLoops } = await import("@/lib/nyx-causal");
         report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+        // BlackSwan Assassin — runs once after ~65% of rounds completed
+        try {
+          const cutoff = Math.floor(TOTAL_ROUNDS * 0.65);
+          const assassinRounds = sim.rounds.slice(0, Math.max(cutoff, 1));
+          const { data: aData } = await supabase.functions.invoke("nyx-ai", {
+            body: {
+              task: "assassin",
+              seed: sim.seed,
+              rounds: assassinRounds.map((r) => ({ index: r.index, director: r.director })),
+              runtime: sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+            },
+          });
+          if (aData?.assassin) report = { ...report, assassin: aData.assassin };
+        } catch (err) {
+          console.warn("assassin failed", err);
+        }
       }
       const updated = { ...sim, report, status: "done" as const };
       saveSimulation(updated);
+      if (sim.advanced) recordLearning(updated, report);
       nav({ to: "/report" });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Report failed");
