@@ -100,6 +100,11 @@ function SimulationPage() {
   async function runRound(i: number) {
     if (!sim) return;
 
+    // Re-seed PRNG per round for reproducibility (advanced mode only)
+    if (sim.advanced && typeof sim.prngSeed === "number") {
+      setSimulationSeed((sim.prngSeed + i * 0x9e3779b1) | 0);
+    }
+
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
@@ -143,6 +148,7 @@ function SimulationPage() {
         advanced: !!sim.advanced,
         runtime: runtime ? runtimeForPrompt(runtime) : undefined,
         events: preEvents,
+        pastInsight: sim.advanced ? sim.pastInsight : undefined,
       },
     });
     if (error) throw error;
