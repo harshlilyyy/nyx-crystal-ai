@@ -1051,8 +1051,11 @@ export function applyV5Round(
     c.learning_rate = clamp01(c.learning_rate + 0.02 * flags.success_flag - 0.02 * flags.failure_flag);
     c.consistency = clamp01(c.consistency + 0.03 * c.momentum - 0.05 * flags.failure_flag - 0.03 * (rt.cascade ? 1 : 0));
 
-    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4)
-    if (failure_streak >= 3 && c.self_worth < 0.4) {
+    // Refined cascade trigger (v6.2): failure gated by perceived relevance.
+    // Source of failure defaults to self → existence_value = 1.
+    const effective_failure = flags.failure_flag * 1;
+    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4) OR effective_failure spike
+    if ((failure_streak >= 3 && c.self_worth < 0.4) || effective_failure > 0.3) {
       rt.cascade = true;
       events.push({ agentId: rt.agentId, kind: "cascade", description: `${name} entered a failure cascade.` });
     }
