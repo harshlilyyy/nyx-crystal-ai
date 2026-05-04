@@ -192,6 +192,14 @@ export interface Round {
   events?: { agentId: string; kind: string; description: string }[];
 }
 
+export interface AssassinReport {
+  assumption: string;
+  whyFragile: string;
+  breakScenario: string;
+  impactIfBroken: string;
+  probability?: number;
+}
+
 export interface Report {
   winner: string;
   confidence: number;
@@ -202,6 +210,7 @@ export interface Report {
   timeline: { period: string; event: string }[];
   summary: string;
   loopAnalysis?: LoopAnalysis;
+  assassin?: AssassinReport;
 }
 
 export interface Simulation {
@@ -217,4 +226,19 @@ export interface Simulation {
   // advanced
   advanced?: boolean;
   runtime?: Record<string, AgentRuntime>;
+  // v6.4 — reproducibility & learning
+  prngSeed?: number;          // mulberry32 seed for stochastic events
+  pastInsight?: string;       // injected from prior runs (advanced only)
 }
+
+// v6.4 — persistent learning summary (last 30 runs)
+export interface LearningSummary {
+  id: string;
+  ts: number;
+  keywords: string[];
+  topVars: string[];
+  outcome: "growth" | "collapse" | "recovery" | "steady" | "fragile" | "spike" | "avoid";
+  confidence: number;
+  prngSeed?: number;
+}
+
