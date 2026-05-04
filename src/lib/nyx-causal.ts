@@ -20,7 +20,26 @@ import { NYX_AGENTS } from "./nyx-agents";
 const clamp = (v: number, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
-const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
+
+// ===== Seedable PRNG (mulberry32) =====
+// All stochastic calls in this module route through _rng so simulations are
+// reproducible when a numeric seed is set via setSimulationSeed().
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let _rng: () => number = Math.random;
+export function setSimulationSeed(seed: number | undefined): void {
+  _rng = typeof seed === "number" && Number.isFinite(seed) ? mulberry32(seed | 0) : Math.random;
+}
+export function rngRandom(): number { return _rng(); }
+const rand = (lo: number, hi: number) => lo + _rng() * (hi - lo);
 
 export function defaultState(): AgentState {
   const skill = rand(0.4, 0.7);
