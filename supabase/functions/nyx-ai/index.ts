@@ -32,6 +32,7 @@ const NYX_AGENTS: Record<string, { name: string; role: string; personality: stri
   noor: { name: "Noor", role: "Pragmatist", personality: "Shippable steps" },
   arc: { name: "Arc", role: "Director", personality: "Synthesizer" },
   vera: { name: "Vera", role: "Report Agent", personality: "Clarity from chaos" },
+  blackswan: { name: "BlackSwan Assassin", role: "Adversarial Auditor", personality: "Hunts the one fragile assumption everyone shares" },
 };
 
 async function callAI(body: Record<string, unknown>) {
