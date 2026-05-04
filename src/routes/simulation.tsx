@@ -65,13 +65,35 @@ function SimulationPage() {
   useEffect(() => {
     const s = getCurrent();
     if (!s || s.agentIds.length < 2) { nav({ to: "/agents" }); return; }
-    setSim(s);
-    if (s.rounds.length) {
-      setRoundIdx(s.rounds.length);
-      const all = s.rounds.flatMap((r) => r.feed);
+    // v6.4 — auto-generate PRNG seed if missing (advanced mode); inject past insight
+    let next = s;
+    if (s.advanced) {
+      let mutated = false;
+      const patch: Partial<Simulation> = {};
+      if (typeof s.prngSeed !== "number") {
+        patch.prngSeed = Math.floor(Math.random() * 2 ** 31);
+        mutated = true;
+      }
+      if (s.rounds.length === 0) {
+        const insight = deriveInsight(s.seed);
+        if (insight && insight !== s.pastInsight) {
+          patch.pastInsight = insight;
+          mutated = true;
+        }
+      }
+      if (mutated) {
+        next = { ...s, ...patch };
+        saveSimulation(next);
+      }
+    }
+    setSim(next);
+    if (next.advanced) setSimulationSeed(next.prngSeed);
+    if (next.rounds.length) {
+      setRoundIdx(next.rounds.length);
+      const all = next.rounds.flatMap((r) => r.feed);
       setTwitter(all.filter((f) => f.platform === "twitter"));
       setReddit(all.filter((f) => f.platform === "reddit"));
-      setDirectorNotes(s.rounds.map((r) => r.director));
+      setDirectorNotes(next.rounds.map((r) => r.director));
     }
   }, [nav]);
 
