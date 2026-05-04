@@ -281,7 +281,7 @@ function SimulationPage() {
           </div>
           <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
             {Object.values(sim.runtime).map((rt) => {
-              const t = v5Telemetry(rt);
+              const t = v5Telemetry(rt, sim.runtime);
               const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
               const modeColor =
                 t.mode === "collapse" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
