@@ -1051,8 +1051,11 @@ export function applyV5Round(
     c.learning_rate = clamp01(c.learning_rate + 0.02 * flags.success_flag - 0.02 * flags.failure_flag);
     c.consistency = clamp01(c.consistency + 0.03 * c.momentum - 0.05 * flags.failure_flag - 0.03 * (rt.cascade ? 1 : 0));
 
-    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4)
-    if (failure_streak >= 3 && c.self_worth < 0.4) {
+    // Refined cascade trigger (v6.2): failure gated by perceived relevance.
+    // Source of failure defaults to self → existence_value = 1.
+    const effective_failure = flags.failure_flag * 1;
+    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4) OR effective_failure spike
+    if ((failure_streak >= 3 && c.self_worth < 0.4) || effective_failure > 0.3) {
       rt.cascade = true;
       events.push({ agentId: rt.agentId, kind: "cascade", description: `${name} entered a failure cascade.` });
     }
@@ -1158,9 +1161,22 @@ export function computeExistenceMatrix(runtime: Record<string, AgentRuntime>): E
   return edges;
 }
 
+// Local importance map — derived ranking of others by existence_value (v6.2)
+export function localImportanceMap(
+  agentId: string,
+  runtime: Record<string, AgentRuntime>
+): { id: string; existence_value: number }[] {
+  const matrix = computeExistenceMatrix(runtime);
+  return matrix
+    .filter((e) => e.from === agentId)
+    .map((e) => ({ id: e.to, existence_value: e.existence_value }))
+    .sort((a, b) => b.existence_value - a.existence_value);
+}
+
 // Telemetry helpers for v5
-export function v5Telemetry(rt: AgentRuntime) {
+export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRuntime>) {
   const c = rt.core ?? defaultCore();
+  const importance = runtime ? localImportanceMap(rt.agentId, runtime) : [];
   return {
     momentum: c.momentum,
     cascade: !!rt.cascade,
@@ -1172,6 +1188,9 @@ export function v5Telemetry(rt: AgentRuntime) {
     emotionalAnchor: rt.emotionalAnchor,
     selfPerceptionBias: rt.selfPerceptionBias ?? 0,
     phenomenologicalPenetration: c.phenomenological_penetration ?? 0.5,
+    importanceMap: importance,
+    topRelevant: importance.slice(0, 3),
   };
 }
+
 
