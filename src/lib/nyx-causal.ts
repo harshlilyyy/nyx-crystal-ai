@@ -294,7 +294,7 @@ export function rollRandomEvents(
     // higher isolation + higher anxiety -> more negative shocks
     const negativeP = Math.max(0, Math.min(0.5, s.isolation * 0.4 + s.anxiety * 0.2));
 
-    const r = Math.random();
+    const r = rngRandom();
     if (r < positiveP) {
       const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
       events.push({
@@ -491,7 +491,7 @@ export function rollRegressionEvent(
   if ((roundIndex + 1) % 3 !== 0) return null;
   const ids = Object.keys(runtime);
   if (ids.length === 0) return null;
-  const id = ids[Math.floor(Math.random() * ids.length)];
+  const id = ids[Math.floor(rngRandom() * ids.length)];
   const rt = runtime[id];
   const s = rt.state;
   const a = NYX_AGENTS.find((x) => x.id === id);
@@ -523,10 +523,10 @@ export function rollOpportunities(
   for (const rt of Object.values(runtime)) {
     const s = rt.state;
     const p = s.skill_level * 0.5 + s.networking * 0.3;
-    if (Math.random() < p && s.skill_level > 0.6) {
+    if (rngRandom() < p && s.skill_level > 0.6) {
       const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
       const kinds: OpportunityCard["kind"][] = ["mentor", "internship", "partnership", "audience", "collab"];
-      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+      const kind = kinds[Math.floor(rngRandom() * kinds.length)];
       const descMap: Record<OpportunityCard["kind"], string> = {
         mentor: `A mentor reaches out to ${a?.name ?? rt.agentId} with a clear next step.`,
         internship: `${a?.name ?? rt.agentId} is offered a focused trial role.`,
@@ -535,7 +535,7 @@ export function rollOpportunities(
         collab: `${a?.name ?? rt.agentId} is pulled into a collaboration.`,
       };
       const card: OpportunityCard = {
-        id: `opp_${roundIndex}_${rt.agentId}_${Math.random().toString(36).slice(2, 6)}`,
+        id: `opp_${roundIndex}_${rt.agentId}_${rngRandom().toString(36).slice(2, 6)}`,
         kind,
         description: descMap[kind],
         round: roundIndex,
@@ -773,7 +773,7 @@ export function updateParentExpectation(rt: AgentRuntime): void {
 export function applySignalReversal(rt: AgentRuntime, roundIndex: number): MicroFailure | null {
   const s = rt.state;
   const gap = s.perceived_skill - s.actual_skill;
-  if (gap > 0.25 && Math.random() < 0.35) {
+  if (gap > 0.25 && rngRandom() < 0.35) {
     s.signal_strength = clamp01(s.signal_strength - 0.18);
     s.perceived_skill = clamp01(s.perceived_skill - 0.15);
     s.reputation = clamp01(s.reputation - 0.1);
@@ -801,8 +801,8 @@ export function rollMicroFailures(
   for (const rt of Object.values(runtime)) {
     const s = rt.state;
     const p = Math.min(0.4, 0.05 + s.anxiety * 0.2 + (s.inactionStreak ?? 0) * 0.05);
-    if (Math.random() < p) {
-      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    if (rngRandom() < p) {
+      const kind = kinds[Math.floor(rngRandom() * kinds.length)];
       const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
       const descMap: Record<MicroFailure["kind"], string> = {
         rejected_application: `${a?.name ?? rt.agentId} — application rejected.`,
@@ -984,12 +984,12 @@ function rollFlags(rt: AgentRuntime): {
   const c = rt.core;
   const pSuccess = clamp01(0.2 + 0.5 * c.consistency + 0.2 * c.opportunity_access);
   const pCollapse = clamp01(0.2 + 0.4 * c.anxiety + 0.2 * c.fragility_index);
-  const success_flag = Math.random() < pSuccess ? 1 : 0;
-  const failure_flag = Math.random() < pCollapse ? 1 : 0;
-  const signal_boost = success_flag ? 0.3 + Math.random() * 0.4 : 0;
-  const social_feedback = success_flag ? 0.2 + Math.random() * 0.3 : (failure_flag ? -0.15 : 0);
+  const success_flag = rngRandom() < pSuccess ? 1 : 0;
+  const failure_flag = rngRandom() < pCollapse ? 1 : 0;
+  const signal_boost = success_flag ? 0.3 + rngRandom() * 0.4 : 0;
+  const social_feedback = success_flag ? 0.2 + rngRandom() * 0.3 : (failure_flag ? -0.15 : 0);
   // mentor handled separately in applyV5Round (deterministic on streak)
-  const event_driven = clamp01((failure_flag ? 0.3 : 0) + Math.random() * 0.2);
+  const event_driven = clamp01((failure_flag ? 0.3 : 0) + rngRandom() * 0.2);
   return { success_flag, failure_flag, signal_boost, social_feedback, mentor_flag: 0, event_driven };
 }
 
