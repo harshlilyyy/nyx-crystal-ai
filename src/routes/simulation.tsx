@@ -309,6 +309,22 @@ function SimulationPage() {
                   <V5Bar label="Fragility" v={t.fragility} tone={t.fragility > 0.6 ? "warn" : "muted"} />
                   <V5Bar label="Identity Conflict" v={t.identityConflict} tone={t.identityConflict > 0.4 ? "warn" : "muted"} />
                   <V5Bar label="Time Pressure" v={t.timePressure} tone="muted" />
+                  <V5Bar label="Phenom. Penetration" v={t.phenomenologicalPenetration} tone="muted" />
+                  {t.topRelevant.length > 0 && (
+                    <div className="mt-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Most Relevant Others</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {t.topRelevant.map((r) => {
+                          const ag = NYX_AGENTS.find((x) => x.id === r.id);
+                          return (
+                            <span key={r.id} className="rounded-full bg-secondary/60 px-1.5 py-0.5 text-[9px] font-mono text-secondary-foreground">
+                              {ag?.avatar} {ag?.name?.split(" ")[0] ?? r.id} · {r.existence_value.toFixed(2)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {t.customVars.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {t.customVars.map((cv, idx) => (
