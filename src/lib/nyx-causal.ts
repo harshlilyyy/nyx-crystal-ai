@@ -1161,9 +1161,22 @@ export function computeExistenceMatrix(runtime: Record<string, AgentRuntime>): E
   return edges;
 }
 
+// Local importance map — derived ranking of others by existence_value (v6.2)
+export function localImportanceMap(
+  agentId: string,
+  runtime: Record<string, AgentRuntime>
+): { id: string; existence_value: number }[] {
+  const matrix = computeExistenceMatrix(runtime);
+  return matrix
+    .filter((e) => e.from === agentId)
+    .map((e) => ({ id: e.to, existence_value: e.existence_value }))
+    .sort((a, b) => b.existence_value - a.existence_value);
+}
+
 // Telemetry helpers for v5
-export function v5Telemetry(rt: AgentRuntime) {
+export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRuntime>) {
   const c = rt.core ?? defaultCore();
+  const importance = runtime ? localImportanceMap(rt.agentId, runtime) : [];
   return {
     momentum: c.momentum,
     cascade: !!rt.cascade,
@@ -1175,6 +1188,9 @@ export function v5Telemetry(rt: AgentRuntime) {
     emotionalAnchor: rt.emotionalAnchor,
     selfPerceptionBias: rt.selfPerceptionBias ?? 0,
     phenomenologicalPenetration: c.phenomenological_penetration ?? 0.5,
+    importanceMap: importance,
+    topRelevant: importance.slice(0, 3),
   };
 }
+
 
