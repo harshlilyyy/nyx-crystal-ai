@@ -21,6 +21,7 @@ export const NYX_AGENTS: Agent[] = [
   { id: "noor", name: "Noor", role: "Pragmatist", avatar: "🧭", personality: "Cuts ambition into shippable steps.", specialty: "Pragmatism" },
   { id: "arc", name: "Arc", role: "Director", avatar: "🎬", personality: "Synthesizes the room into a single thread.", specialty: "Synthesis" },
   { id: "vera", name: "Vera", role: "Report Agent", avatar: "📖", personality: "Translates chaos into clarity.", specialty: "Reporting" },
+  { id: "blackswan", name: "BlackSwan Assassin", role: "Adversarial Auditor", avatar: "🦢", personality: "Hunts the one fragile assumption everyone shares.", specialty: "Adversarial audit" },
 ];
 
 export const PRESETS: Record<string, { label: string; agentIds: string[] }> = {

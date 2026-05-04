@@ -29,7 +29,9 @@ import {
   successScore,
   applyV5Round,
   v5Telemetry,
+  setSimulationSeed,
 } from "@/lib/nyx-causal";
+import { deriveInsight, recordLearning } from "@/lib/nyx-learning";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
@@ -63,18 +65,45 @@ function SimulationPage() {
   useEffect(() => {
     const s = getCurrent();
     if (!s || s.agentIds.length < 2) { nav({ to: "/agents" }); return; }
-    setSim(s);
-    if (s.rounds.length) {
-      setRoundIdx(s.rounds.length);
-      const all = s.rounds.flatMap((r) => r.feed);
+    // v6.4 — auto-generate PRNG seed if missing (advanced mode); inject past insight
+    let next = s;
+    if (s.advanced) {
+      let mutated = false;
+      const patch: Partial<Simulation> = {};
+      if (typeof s.prngSeed !== "number") {
+        patch.prngSeed = Math.floor(Math.random() * 2 ** 31);
+        mutated = true;
+      }
+      if (s.rounds.length === 0) {
+        const insight = deriveInsight(s.seed);
+        if (insight && insight !== s.pastInsight) {
+          patch.pastInsight = insight;
+          mutated = true;
+        }
+      }
+      if (mutated) {
+        next = { ...s, ...patch };
+        saveSimulation(next);
+      }
+    }
+    setSim(next);
+    if (next.advanced) setSimulationSeed(next.prngSeed);
+    if (next.rounds.length) {
+      setRoundIdx(next.rounds.length);
+      const all = next.rounds.flatMap((r) => r.feed);
       setTwitter(all.filter((f) => f.platform === "twitter"));
       setReddit(all.filter((f) => f.platform === "reddit"));
-      setDirectorNotes(s.rounds.map((r) => r.director));
+      setDirectorNotes(next.rounds.map((r) => r.director));
     }
   }, [nav]);
 
   async function runRound(i: number) {
     if (!sim) return;
+
+    // Re-seed PRNG per round for reproducibility (advanced mode only)
+    if (sim.advanced && typeof sim.prngSeed === "number") {
+      setSimulationSeed((sim.prngSeed + i * 0x9e3779b1) | 0);
+    }
 
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
@@ -119,6 +148,7 @@ function SimulationPage() {
         advanced: !!sim.advanced,
         runtime: runtime ? runtimeForPrompt(runtime) : undefined,
         events: preEvents,
+        pastInsight: sim.advanced ? sim.pastInsight : undefined,
       },
     });
     if (error) throw error;
@@ -208,9 +238,26 @@ function SimulationPage() {
       if (sim.advanced) {
         const { analyzeLoops } = await import("@/lib/nyx-causal");
         report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+        // BlackSwan Assassin — runs once after ~65% of rounds completed
+        try {
+          const cutoff = Math.floor(TOTAL_ROUNDS * 0.65);
+          const assassinRounds = sim.rounds.slice(0, Math.max(cutoff, 1));
+          const { data: aData } = await supabase.functions.invoke("nyx-ai", {
+            body: {
+              task: "assassin",
+              seed: sim.seed,
+              rounds: assassinRounds.map((r) => ({ index: r.index, director: r.director })),
+              runtime: sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+            },
+          });
+          if (aData?.assassin) report = { ...report, assassin: aData.assassin };
+        } catch (err) {
+          console.warn("assassin failed", err);
+        }
       }
       const updated = { ...sim, report, status: "done" as const };
       saveSimulation(updated);
+      if (sim.advanced) recordLearning(updated, report);
       nav({ to: "/report" });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Report failed");
@@ -265,6 +312,14 @@ function SimulationPage() {
         <div className="glass rounded-[22px] p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Director · Round {directorNotes.length}</div>
           <p className="mt-1 text-sm leading-relaxed">{directorNotes[directorNotes.length - 1]}</p>
+        </div>
+      )}
+
+      {/* Past-run insight (advanced only) */}
+      {sim?.advanced && sim.pastInsight && (
+        <div className="glass rounded-[22px] p-3 ring-1 ring-[oklch(0.92_0.04_70)]">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Past-run insight</div>
+          <p className="mt-1 text-xs leading-snug text-muted-foreground">{sim.pastInsight}</p>
         </div>
       )}
 

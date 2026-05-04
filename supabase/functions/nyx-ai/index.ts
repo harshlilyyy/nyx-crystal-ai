@@ -32,6 +32,7 @@ const NYX_AGENTS: Record<string, { name: string; role: string; personality: stri
   noor: { name: "Noor", role: "Pragmatist", personality: "Shippable steps" },
   arc: { name: "Arc", role: "Director", personality: "Synthesizer" },
   vera: { name: "Vera", role: "Report Agent", personality: "Clarity from chaos" },
+  blackswan: { name: "BlackSwan Assassin", role: "Adversarial Auditor", personality: "Hunts the one fragile assumption everyone shares" },
 };
 
 async function callAI(body: Record<string, unknown>) {
@@ -251,7 +252,7 @@ Deno.serve(async (req) => {
         : `\n\nStandard Nyx debate mode. Allowed actions: POST, COMMENT, LIKE, REPOST.`;
 
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}${advancedBlock}\n\nGenerate 8-12 short feed posts (mix across allowed actions) split between twitter and reddit, each in the agent's distinct voice. Then a 2-sentence director summary. ${advanced ? 'When relevant, include outcomeProbabilities for 1-3 pivotal moments this round.' : ''}`,
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}${advancedBlock}${payload.pastInsight ? `\n\nPRIOR-RUN INSIGHT (from past similar simulations):\n${payload.pastInsight}` : ""}\n\nGenerate 8-12 short feed posts (mix across allowed actions) split between twitter and reddit, each in the agent's distinct voice. Then a 2-sentence director summary. ${advanced ? 'When relevant, include outcomeProbabilities for 1-3 pivotal moments this round.' : ''}`,
         "You simulate a multi-agent strategy room. Each post 1-2 short sentences, sharp and in-character. In advanced mode, agent psychology dictates action choice.",
         "round",
         {
@@ -324,6 +325,26 @@ Deno.serve(async (req) => {
         }
       );
       return Response.json(out, { headers: corsHeaders });
+    }
+
+    if (task === "assassin") {
+      const out = await structured(
+        `Seed: ${payload.seed}\nRounds so far (director notes & feed): ${JSON.stringify(payload.rounds)}\nCurrent agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\n\nIdentify the ONE most fragile assumption the other agents implicitly agree on. Anchor your critique in the actual numeric state variables shown (consistency, anxiety, self_worth, momentum, reputation, fragility_index, etc.). Be concrete and quantitative — if this assumption were wrong, exactly how would the outcome change? Describe a break scenario where the most exposed variable shifts by 20% in the opposite direction.`,
+        "You are the BlackSwan Assassin. Your job is to find the ONE most fragile assumption the other agents agree on. Anchor your criticism in the simulation's actual state variables (consistency, anxiety, self_worth, etc.). Be concrete and quantitative — if an assumption were wrong, exactly how would that change the outcome?",
+        "assassin",
+        {
+          type: "object",
+          properties: {
+            assumption: { type: "string" },
+            whyFragile: { type: "string" },
+            breakScenario: { type: "string" },
+            impactIfBroken: { type: "string" },
+            probability: { type: "number" },
+          },
+          required: ["assumption", "whyFragile", "breakScenario", "impactIfBroken"],
+        }
+      );
+      return Response.json({ assassin: out }, { headers: corsHeaders });
     }
 
     if (task === "chat") {

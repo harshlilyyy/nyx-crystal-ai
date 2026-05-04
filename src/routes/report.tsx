@@ -60,7 +60,39 @@ function ReportPage() {
         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Winner</div>
         <h2 className="mt-1 font-display text-2xl font-semibold text-balance">{r.winner}</h2>
         <ConfidenceGauge value={r.confidence} />
+        {sim.advanced && typeof sim.prngSeed === "number" && (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 font-mono text-[10px] text-muted-foreground">
+            <span className="font-semibold uppercase tracking-wider text-primary">seed</span>
+            <span>{sim.prngSeed}</span>
+            <button
+              onClick={() => { navigator.clipboard.writeText(String(sim.prngSeed)); toast.success("Seed copied"); }}
+              className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] uppercase tracking-wider text-secondary-foreground"
+            >
+              copy
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Assassin's Report (advanced only) — sits BEFORE the regular verdict sections */}
+      {sim.advanced && r.assassin && (
+        <div className="glass rounded-[24px] p-4 ring-1 ring-[oklch(0.92_0.05_25)]">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
+              🦢 Assassin's Report
+            </div>
+            {typeof r.assassin.probability === "number" && (
+              <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-[9px] font-mono text-secondary-foreground">
+                p = {Math.round(r.assassin.probability * 100)}%
+              </span>
+            )}
+          </div>
+          <AssassinField label="Assumption" value={r.assassin.assumption} />
+          <AssassinField label="Why fragile" value={r.assassin.whyFragile} />
+          <AssassinField label="Break scenario" value={r.assassin.breakScenario} />
+          <AssassinField label="Impact if broken" value={r.assassin.impactIfBroken} />
+        </div>
+      )}
 
       {/* Scores */}
       <div className="glass rounded-[22px] p-4">
@@ -182,6 +214,15 @@ function ConfidenceGauge({ value }: { value: number }) {
         <span className="font-display text-2xl font-semibold">{Math.round(pct * 100)}%</span>
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">confidence</span>
       </div>
+    </div>
+  );
+}
+
+function AssassinField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mt-2">
+      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <p className="mt-0.5 text-sm leading-relaxed">{value}</p>
     </div>
   );
 }

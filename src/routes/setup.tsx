@@ -143,22 +143,67 @@ function SetupPage() {
           <Switch checked={!!sim?.advanced} onCheckedChange={toggleAdvanced} />
         </div>
         {sim?.advanced && (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2">
-            <div className="text-[11px] leading-snug text-muted-foreground">
-              {sim.agentIds.length > 0
-                ? "Initialize 10-variable agent state from your scenario."
-                : "Pick agents first, then re-initialize from seed."}
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2">
+              <div className="text-[11px] leading-snug text-muted-foreground">
+                {sim.agentIds.length > 0
+                  ? "Initialize 10-variable agent state from your scenario."
+                  : "Pick agents first, then re-initialize from seed."}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={loading || !sim.seed.trim() || sim.agentIds.length === 0}
+                onClick={() => initAdvancedFromSeed(sim)}
+                className="rounded-full text-xs"
+              >
+                {loading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                Re-initialize
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={loading || !sim.seed.trim() || sim.agentIds.length === 0}
-              onClick={() => initAdvancedFromSeed(sim)}
-              className="rounded-full text-xs"
+            <div className="flex items-center gap-2 rounded-2xl bg-white/50 px-3 py-2">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                PRNG Seed
+              </label>
+              <input
+                type="number"
+                value={sim.prngSeed ?? ""}
+                placeholder="auto"
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const next = { ...sim, prngSeed: v === "" ? undefined : Number(v) };
+                  setSim(next); saveSimulation(next);
+                }}
+                className="flex-1 rounded-xl bg-white/70 px-2 py-1 font-mono text-xs outline-none ring-1 ring-border focus:ring-primary/40"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const v = Math.floor(Math.random() * 2 ** 31);
+                  const next = { ...sim, prngSeed: v };
+                  setSim(next); saveSimulation(next);
+                }}
+                className="rounded-full text-xs"
+              >
+                Random
+              </Button>
+            </div>
+            {typeof sim.prngSeed === "number" && (
+              <div className="px-3 text-[10px] font-mono text-muted-foreground">
+                seed = {sim.prngSeed} · simulations with this seed will replay identically
+              </div>
+            )}
+            <button
+              onClick={async () => {
+                const { resetLearning } = await import("@/lib/nyx-learning");
+                resetLearning();
+                toast.success("Past learning wiped");
+              }}
+              className="w-full rounded-2xl bg-white/50 px-3 py-2 text-[11px] text-muted-foreground hover:bg-white/70"
             >
-              {loading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-              Re-initialize
-            </Button>
+              Reset learning (clear past run insights)
+            </button>
           </div>
         )}
       </div>
