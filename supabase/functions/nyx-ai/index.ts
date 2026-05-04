@@ -327,6 +327,26 @@ Deno.serve(async (req) => {
       return Response.json(out, { headers: corsHeaders });
     }
 
+    if (task === "assassin") {
+      const out = await structured(
+        `Seed: ${payload.seed}\nRounds so far (director notes & feed): ${JSON.stringify(payload.rounds)}\nCurrent agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\n\nIdentify the ONE most fragile assumption the other agents implicitly agree on. Anchor your critique in the actual numeric state variables shown (consistency, anxiety, self_worth, momentum, reputation, fragility_index, etc.). Be concrete and quantitative — if this assumption were wrong, exactly how would the outcome change? Describe a break scenario where the most exposed variable shifts by 20% in the opposite direction.`,
+        "You are the BlackSwan Assassin. Your job is to find the ONE most fragile assumption the other agents agree on. Anchor your criticism in the simulation's actual state variables (consistency, anxiety, self_worth, etc.). Be concrete and quantitative — if an assumption were wrong, exactly how would that change the outcome?",
+        "assassin",
+        {
+          type: "object",
+          properties: {
+            assumption: { type: "string" },
+            whyFragile: { type: "string" },
+            breakScenario: { type: "string" },
+            impactIfBroken: { type: "string" },
+            probability: { type: "number" },
+          },
+          required: ["assumption", "whyFragile", "breakScenario", "impactIfBroken"],
+        }
+      );
+      return Response.json({ assassin: out }, { headers: corsHeaders });
+    }
+
     if (task === "chat") {
       const a = NYX_AGENTS[payload.agentId] ?? NYX_AGENTS.vera;
       // deno-lint-ignore no-explicit-any
