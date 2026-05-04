@@ -1034,10 +1034,14 @@ export function applyV5Round(
       + 0.1 * Math.max(effectiveInfluence, 0)
     );
 
-    // Anxiety: peer_gap + event_driven, dampened by success
-    c.anxiety = clamp01(
-      c.anxiety + 0.4 * Math.max(peer_gap, 0) + 0.3 * flags.event_driven - 0.2 * flags.success_flag
-    );
+    // Anxiety: context-sensitive + emotional inertia (v6.3)
+    const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
+    const context_modifier = sigmoid(c.self_worth - c.anxiety);
+    const raw_anxiety_change =
+      context_modifier * (0.4 * Math.max(peer_gap, 0) + 0.3 * flags.event_driven)
+      - 0.2 * flags.success_flag;
+    const raw_next = clamp01(c.anxiety + raw_anxiety_change);
+    c.anxiety = clamp01(0.7 * c.anxiety + 0.3 * raw_next);
 
     // Momentum
     c.momentum = clamp01(
