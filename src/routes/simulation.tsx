@@ -29,7 +29,9 @@ import {
   successScore,
   applyV5Round,
   v5Telemetry,
+  setSimulationSeed,
 } from "@/lib/nyx-causal";
+import { deriveInsight, recordLearning } from "@/lib/nyx-learning";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
