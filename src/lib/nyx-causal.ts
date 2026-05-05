@@ -1113,6 +1113,36 @@ export function applyV5Round(
     }
     if (dominantPerceived) rt.lastPerceivedEvent = dominantPerceived;
 
+    // === v6.6 Cognitive Dissonance — derived contradiction score ===
+    // For each peer j, perceived signed event = (j.success_streak - j.failure_streak)
+    // gated by existence_value_ij * phenom_i. Score = 1 - |Σ s*m| / (Σ m + ε).
+    const EPS = 0.001;
+    const perceivedByPeer: { id: string; signed: number; mag: number }[] = [];
+    for (const edge of existenceEdges) {
+      const peer = runtime[edge.to];
+      if (!peer) continue;
+      const ss = peer.successStreak ?? 0;
+      const fs = peer.failureStreak ?? 0;
+      const valence = ss - fs;
+      if (valence === 0) continue;
+      const signed = Math.sign(valence) * Math.min(1, Math.abs(valence) / 3) * edge.existence_value * phenom;
+      const mag = Math.abs(signed);
+      if (mag > EPS) perceivedByPeer.push({ id: edge.to, signed, mag });
+    }
+    let contradictionScore = 0;
+    let topOpposing: (string | null)[] = [];
+    if (perceivedByPeer.length >= 2) {
+      const sumSigned = perceivedByPeer.reduce((a, p) => a + p.signed, 0);
+      const sumMag = perceivedByPeer.reduce((a, p) => a + p.mag, 0);
+      contradictionScore = clamp01(1 - Math.abs(sumSigned) / (sumMag + EPS));
+      // Top-2 opposing: strongest positive + strongest negative contributors
+      const pos = perceivedByPeer.filter((p) => p.signed > 0).sort((a, b) => b.mag - a.mag)[0];
+      const neg = perceivedByPeer.filter((p) => p.signed < 0).sort((a, b) => b.mag - a.mag)[0];
+      topOpposing = [pos?.id ?? null, neg?.id ?? null].filter((x) => x !== null) as string[];
+    }
+    rt.contradictionScore = +contradictionScore.toFixed(3);
+    rt.topOpposingSources = topOpposing;
+
     // Streaks
     if (flags.success_flag) { rt.successStreak = (rt.successStreak ?? 0) + 1; rt.failureStreak = 0; }
     else if (flags.failure_flag > 0.3) { rt.failureStreak = (rt.failureStreak ?? 0) + 1; rt.successStreak = 0; }
