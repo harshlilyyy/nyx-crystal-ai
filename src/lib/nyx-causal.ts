@@ -1031,9 +1031,91 @@ export function applyV5Round(
     const effectiveInfluence = existenceEdges.reduce((max, edge) => Math.max(max, edge.existence_value), 0);
     const flags = rollFlags(rt);
 
+    // === v6.5 Bridge: World → Mind perception filter ===
+    // Resolve previous round's emitted intent (one-tick lag), then dampen
+    // raw event flags by perceived relevance of their source.
+    const phenom = c.phenomenological_penetration ?? 0.5;
+    // Resolve pending intent from previous round
+    if (rt.pendingIntent) {
+      const intent = rt.pendingIntent;
+      const visibility = clamp01(c.reputation);
+      const effective_success = clamp01(intent.strength * c.opportunity_access * visibility);
+      // Adjust this round's stochastic flags by intent resolution
+      if (effective_success > 0.5) {
+        flags.success_flag = 1;
+        flags.signal_boost = Math.max(flags.signal_boost, 0.3 + effective_success * 0.4);
+        flags.failure_flag = 0;
+      } else if (effective_success < 0.2) {
+        flags.failure_flag = 1;
+        flags.success_flag = 0;
+        flags.event_driven = clamp01(flags.event_driven + 0.2);
+      }
+      const outcome: "success" | "failure" | "neutral" =
+        effective_success > 0.5 ? "success" : effective_success < 0.2 ? "failure" : "neutral";
+      rt.lastResolvedOutcome = {
+        round: intent.round,
+        resolvedAt: roundIndex,
+        intentType: intent.type,
+        effectiveSuccess: +effective_success.toFixed(3),
+        visibility: +visibility.toFixed(3),
+        outcome,
+      };
+      rt.pendingIntent = undefined;
+    }
+
+    // Perception filter: raw_event * phenomenological_penetration * existence_value_ij
+    const pickSource = (): { id: string | null; ev: number } => {
+      // Pick highest-existence-value source for this perceiver as the "loudest"
+      // event origin; self-caused defaults to ev=1.
+      const top = existenceEdges.reduce<{ id: string | null; ev: number }>(
+        (best, e) => (e.existence_value > best.ev ? { id: e.to, ev: e.existence_value } : best),
+        { id: null, ev: 0 }
+      );
+      return top.id ? top : { id: null, ev: 1 };
+    };
+    const filterEvent = (raw: number, hasSource: boolean): { perceived: number; source: { id: string | null; ev: number } } => {
+      const source = hasSource ? pickSource() : { id: null, ev: 1 };
+      return { perceived: raw * phenom * source.ev, source };
+    };
+
+    // Apply filter to event-driven flags (social_feedback, failure, mentor, event_driven)
+    let dominantPerceived: import("./nyx-types").PerceivedEvent | null = null;
+    if (flags.social_feedback !== 0) {
+      const { perceived, source } = filterEvent(flags.social_feedback, true);
+      flags.social_feedback = perceived;
+      dominantPerceived = {
+        round: roundIndex, kind: "social_feedback",
+        raw: +flags.social_feedback.toFixed(3), perceived: +perceived.toFixed(3),
+        sourceId: source.id, existenceValue: +source.ev.toFixed(3), phenomPenetration: +phenom.toFixed(3),
+      };
+    }
+    if (flags.failure_flag) {
+      const { perceived, source } = filterEvent(flags.failure_flag, true);
+      flags.failure_flag = perceived;
+      dominantPerceived = {
+        round: roundIndex, kind: "failure",
+        raw: 1, perceived: +perceived.toFixed(3),
+        sourceId: source.id, existenceValue: +source.ev.toFixed(3), phenomPenetration: +phenom.toFixed(3),
+      };
+    }
+    if (mentor_flag) {
+      const { perceived, source } = filterEvent(1, true);
+      // mentor_flag stays binary for downstream conditions, but record perceived strength
+      dominantPerceived = {
+        round: roundIndex, kind: "mentor",
+        raw: 1, perceived: +perceived.toFixed(3),
+        sourceId: source.id, existenceValue: +source.ev.toFixed(3), phenomPenetration: +phenom.toFixed(3),
+      };
+    }
+    if (flags.event_driven > 0) {
+      const { perceived } = filterEvent(flags.event_driven, false);
+      flags.event_driven = perceived;
+    }
+    if (dominantPerceived) rt.lastPerceivedEvent = dominantPerceived;
+
     // Streaks
     if (flags.success_flag) { rt.successStreak = (rt.successStreak ?? 0) + 1; rt.failureStreak = 0; }
-    else if (flags.failure_flag) { rt.failureStreak = (rt.failureStreak ?? 0) + 1; rt.successStreak = 0; }
+    else if (flags.failure_flag > 0.3) { rt.failureStreak = (rt.failureStreak ?? 0) + 1; rt.successStreak = 0; }
 
     const success_streak = rt.successStreak ?? 0;
     const failure_streak = rt.failureStreak ?? 0;
