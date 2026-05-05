@@ -382,6 +382,34 @@ function SimulationPage() {
                       </div>
                     </div>
                   )}
+                  {(t.lastPerceivedEvent || t.lastIntent || t.lastResolvedOutcome) && (
+                    <div className="mt-1.5 rounded-xl bg-secondary/40 px-2 py-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Bridge</div>
+                      {t.lastPerceivedEvent && (
+                        <div className="mt-0.5 text-[10px] leading-snug">
+                          <span className="font-semibold">Felt:</span> {t.lastPerceivedEvent.kind} ({t.lastPerceivedEvent.perceived.toFixed(2)} of {t.lastPerceivedEvent.raw.toFixed(2)})
+                          {t.lastPerceivedEvent.sourceId && (() => {
+                            const src = NYX_AGENTS.find((x) => x.id === t.lastPerceivedEvent!.sourceId);
+                            return <> · from {src?.avatar}{src?.name?.split(" ")[0] ?? t.lastPerceivedEvent!.sourceId}</>;
+                          })()}
+                        </div>
+                      )}
+                      {t.lastIntent && (() => {
+                        const tgt = t.lastIntent.targetId ? NYX_AGENTS.find((x) => x.id === t.lastIntent!.targetId) : null;
+                        return (
+                          <div className="mt-0.5 text-[10px] leading-snug">
+                            <span className="font-semibold">Intent:</span> {t.lastIntent.type} · str {t.lastIntent.strength.toFixed(2)}
+                            {tgt && <> → {tgt.avatar}{tgt.name?.split(" ")[0]}</>}
+                          </div>
+                        );
+                      })()}
+                      {t.lastResolvedOutcome && (
+                        <div className="mt-0.5 text-[10px] leading-snug">
+                          <span className="font-semibold">Resolved:</span> {t.lastResolvedOutcome.intentType} → {t.lastResolvedOutcome.outcome} (eff {t.lastResolvedOutcome.effectiveSuccess.toFixed(2)})
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {t.customVars.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {t.customVars.map((cv, idx) => (
