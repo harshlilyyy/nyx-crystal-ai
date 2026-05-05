@@ -408,6 +408,26 @@ function SimulationPage() {
                           <span className="font-semibold">Resolved:</span> {t.lastResolvedOutcome.intentType} → {t.lastResolvedOutcome.outcome} (eff {t.lastResolvedOutcome.effectiveSuccess.toFixed(2)})
                         </div>
                       )}
+                      {typeof t.contradictionScore === "number" && (
+                        <div className="mt-1">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-semibold">Dissonance</span>
+                            <span className="font-mono text-muted-foreground">{t.contradictionScore.toFixed(2)}</span>
+                          </div>
+                          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-secondary/60">
+                            <div className="h-full bg-primary/70" style={{ width: `${Math.round(t.contradictionScore * 100)}%` }} />
+                          </div>
+                          {t.topOpposingSources && t.topOpposingSources.length === 2 && (() => {
+                            const a1 = NYX_AGENTS.find((x) => x.id === t.topOpposingSources![0]);
+                            const a2 = NYX_AGENTS.find((x) => x.id === t.topOpposingSources![1]);
+                            return (
+                              <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                                Opposing: {a1?.avatar}{a1?.name?.split(" ")[0]} ↔ {a2?.avatar}{a2?.name?.split(" ")[0]}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   )}
                   {t.customVars.length > 0 && (

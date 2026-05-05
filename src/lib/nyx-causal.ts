@@ -1113,6 +1113,36 @@ export function applyV5Round(
     }
     if (dominantPerceived) rt.lastPerceivedEvent = dominantPerceived;
 
+    // === v6.6 Cognitive Dissonance — derived contradiction score ===
+    // For each peer j, perceived signed event = (j.success_streak - j.failure_streak)
+    // gated by existence_value_ij * phenom_i. Score = 1 - |Σ s*m| / (Σ m + ε).
+    const EPS = 0.001;
+    const perceivedByPeer: { id: string; signed: number; mag: number }[] = [];
+    for (const edge of existenceEdges) {
+      const peer = runtime[edge.to];
+      if (!peer) continue;
+      const ss = peer.successStreak ?? 0;
+      const fs = peer.failureStreak ?? 0;
+      const valence = ss - fs;
+      if (valence === 0) continue;
+      const signed = Math.sign(valence) * Math.min(1, Math.abs(valence) / 3) * edge.existence_value * phenom;
+      const mag = Math.abs(signed);
+      if (mag > EPS) perceivedByPeer.push({ id: edge.to, signed, mag });
+    }
+    let contradictionScore = 0;
+    let topOpposing: (string | null)[] = [];
+    if (perceivedByPeer.length >= 2) {
+      const sumSigned = perceivedByPeer.reduce((a, p) => a + p.signed, 0);
+      const sumMag = perceivedByPeer.reduce((a, p) => a + p.mag, 0);
+      contradictionScore = clamp01(1 - Math.abs(sumSigned) / (sumMag + EPS));
+      // Top-2 opposing: strongest positive + strongest negative contributors
+      const pos = perceivedByPeer.filter((p) => p.signed > 0).sort((a, b) => b.mag - a.mag)[0];
+      const neg = perceivedByPeer.filter((p) => p.signed < 0).sort((a, b) => b.mag - a.mag)[0];
+      topOpposing = [pos?.id ?? null, neg?.id ?? null].filter((x) => x !== null) as string[];
+    }
+    rt.contradictionScore = +contradictionScore.toFixed(3);
+    rt.topOpposingSources = topOpposing;
+
     // Streaks
     if (flags.success_flag) { rt.successStreak = (rt.successStreak ?? 0) + 1; rt.failureStreak = 0; }
     else if (flags.failure_flag > 0.3) { rt.failureStreak = (rt.failureStreak ?? 0) + 1; rt.successStreak = 0; }
@@ -1135,11 +1165,12 @@ export function applyV5Round(
       + 0.1 * Math.max(effectiveInfluence, 0)
     );
 
-    // Anxiety: context-sensitive + emotional inertia (v6.3)
+    // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
     const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
     const context_modifier = sigmoid(c.self_worth - c.anxiety);
+    const effective_peer_gap = peer_gap * (1 + 0.3 * contradictionScore);
     const raw_anxiety_change =
-      context_modifier * (0.4 * Math.max(peer_gap, 0) + 0.3 * flags.event_driven)
+      context_modifier * (0.4 * Math.max(effective_peer_gap, 0) + 0.3 * flags.event_driven)
       - 0.2 * flags.success_flag;
     const raw_next = clamp01(c.anxiety + raw_anxiety_change);
     c.anxiety = clamp01(0.7 * c.anxiety + 0.3 * raw_next);
@@ -1219,14 +1250,47 @@ export function applyV5Round(
     const effective_self_worth = c.self_worth * (1 - rt.selfPerceptionBias);
 
     // Mode (v5/v6.3) — uses effective_self_worth (biased perception)
-    // Conditional anxiety response: same anxiety, different behavior by self_worth.
-    rt.modeV5 =
+    // Conditional anxiety response + v6.6 mode-selection spread under dissonance
+    const baseMode =
       c.fragility_index > 0.75 && effective_self_worth < 0.3 ? "collapse" :
       rt.cascade ? "fragile" :
       c.anxiety > 0.7 && c.self_worth > 0.6 ? "spike" :
       c.anxiety > 0.7 && c.self_worth < 0.4 ? "avoid" :
       effective_self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
+
+    let chosenMode: typeof baseMode = baseMode;
+    if (contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
+      // Build base probs from heuristic affinity scores
+      const scores: Record<string, number> = {
+        growth: clamp01(c.momentum * 0.6 + c.consistency * 0.4),
+        recovery: clamp01((1 - effective_self_worth) * 0.6 + (1 - c.momentum) * 0.4),
+        steady: 0.5,
+        spike: clamp01(c.anxiety * 0.6 + c.self_worth * 0.4),
+        avoid: clamp01(c.anxiety * 0.6 + (1 - c.self_worth) * 0.4),
+      };
+      const EPS2 = 0.001;
+      const T = 1 + 0.2 * contradictionScore;
+      const keys = Object.keys(scores);
+      const logits = keys.map((k) => Math.log(scores[k] + EPS2) / T);
+      const maxL = Math.max(...logits);
+      const exps = logits.map((l) => Math.exp(l - maxL));
+      const sumE = exps.reduce((a, b) => a + b, 0);
+      // Bias preservation: nudge toward base spike/avoid if applicable
+      const probs = exps.map((e) => e / sumE);
+      if (baseMode === "spike" || baseMode === "avoid") {
+        const idx = keys.indexOf(baseMode);
+        probs[idx] = Math.min(1, probs[idx] + 0.2);
+        const sP = probs.reduce((a, b) => a + b, 0);
+        for (let k = 0; k < probs.length; k++) probs[k] /= sP;
+      }
+      let r = rngRandom();
+      for (let k = 0; k < keys.length; k++) {
+        r -= probs[k];
+        if (r <= 0) { chosenMode = keys[k] as typeof baseMode; break; }
+      }
+    }
+    rt.modeV5 = chosenMode;
 
     // Phenomenological penetration update (11th core var)
     c.phenomenological_penetration = clamp01(
@@ -1244,7 +1308,7 @@ export function applyV5Round(
       steady: "OPTIMIZE",
     };
     const intentType = modeToIntent[rt.modeV5 ?? "steady"] ?? "OPTIMIZE";
-    const intentStrength = clamp01(c.self_worth + c.momentum - c.anxiety);
+    const intentStrength = clamp01((c.self_worth + c.momentum - c.anxiety) * (1 - 0.25 * contradictionScore));
     // Softmax over top 5 by existence_value (temperature 0.3)
     const topEdges = [...existenceEdges]
       .sort((a, b) => b.existence_value - a.existence_value)
@@ -1338,6 +1402,8 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     lastPerceivedEvent: rt.lastPerceivedEvent,
     lastIntent: rt.lastIntent,
     lastResolvedOutcome: rt.lastResolvedOutcome,
+    contradictionScore: rt.contradictionScore ?? 0,
+    topOpposingSources: rt.topOpposingSources ?? [],
   };
 }
 
