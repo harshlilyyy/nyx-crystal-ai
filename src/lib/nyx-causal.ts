@@ -1308,7 +1308,7 @@ export function applyV5Round(
       steady: "OPTIMIZE",
     };
     const intentType = modeToIntent[rt.modeV5 ?? "steady"] ?? "OPTIMIZE";
-    const intentStrength = clamp01(c.self_worth + c.momentum - c.anxiety);
+    const intentStrength = clamp01((c.self_worth + c.momentum - c.anxiety) * (1 - 0.25 * contradictionScore));
     // Softmax over top 5 by existence_value (temperature 0.3)
     const topEdges = [...existenceEdges]
       .sort((a, b) => b.existence_value - a.existence_value)
