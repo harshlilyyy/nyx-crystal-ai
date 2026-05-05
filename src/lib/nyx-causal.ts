@@ -1402,6 +1402,8 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     lastPerceivedEvent: rt.lastPerceivedEvent,
     lastIntent: rt.lastIntent,
     lastResolvedOutcome: rt.lastResolvedOutcome,
+    contradictionScore: rt.contradictionScore ?? 0,
+    topOpposingSources: rt.topOpposingSources ?? [],
   };
 }
 
