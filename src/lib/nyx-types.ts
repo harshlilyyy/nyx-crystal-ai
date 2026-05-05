@@ -173,6 +173,9 @@ export interface AgentRuntime {
   lastIntent?: AgentIntent;          // most recent emitted intent
   lastPerceivedEvent?: PerceivedEvent; // most recent filtered world event
   lastResolvedOutcome?: ResolvedOutcome; // resolution of previous-round intent
+  // v6.6 — cognitive dissonance (transient, derived per round)
+  contradictionScore?: number;          // 0..1
+  topOpposingSources?: (string | null)[]; // 2 most opposing peer ids
 }
 
 // v6.5 — Bridge layer types
