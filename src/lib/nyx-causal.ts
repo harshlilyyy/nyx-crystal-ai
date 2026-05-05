@@ -1234,6 +1234,42 @@ export function applyV5Round(
     );
 
     rt.core = c;
+
+    // === v6.5 Bridge: Mind → World intent emission ===
+    // Sample intent type from mode, derive strength, target by softmax(existence_value).
+    const modeToIntent: Record<string, "AVOID" | "RECOVER" | "EXECUTE" | "OPTIMIZE"> = {
+      avoid: "AVOID", collapse: "AVOID", fragile: "AVOID",
+      recovery: "RECOVER",
+      growth: "EXECUTE", spike: "EXECUTE",
+      steady: "OPTIMIZE",
+    };
+    const intentType = modeToIntent[rt.modeV5 ?? "steady"] ?? "OPTIMIZE";
+    const intentStrength = clamp01(c.self_worth + c.momentum - c.anxiety);
+    // Softmax over top 5 by existence_value (temperature 0.3)
+    const topEdges = [...existenceEdges]
+      .sort((a, b) => b.existence_value - a.existence_value)
+      .slice(0, 5);
+    let targetId: string | null = null;
+    let targetEv = 0;
+    if (topEdges.length > 0) {
+      const exps = topEdges.map((e) => Math.exp(e.existence_value / 0.3));
+      const sum = exps.reduce((a, b) => a + b, 0);
+      let r = rngRandom() * sum;
+      for (let k = 0; k < topEdges.length; k++) {
+        r -= exps[k];
+        if (r <= 0) { targetId = topEdges[k].to; targetEv = topEdges[k].existence_value; break; }
+      }
+      if (!targetId) { targetId = topEdges[0].to; targetEv = topEdges[0].existence_value; }
+    }
+    const intent: import("./nyx-types").AgentIntent = {
+      round: roundIndex,
+      type: intentType,
+      strength: +intentStrength.toFixed(3),
+      targetId,
+      targetExistenceValue: +targetEv.toFixed(3),
+    };
+    rt.pendingIntent = intent;
+    rt.lastIntent = intent;
   }
 
   return events;
