@@ -168,6 +168,39 @@ export interface AgentRuntime {
   // v6.1 — emotional realism
   emotionalAnchor?: EmotionalAnchor;
   selfPerceptionBias?: number; // derived: anxiety * 0.5
+  // v6.5 — bidirectional causal bridge (Mind ↔ World)
+  pendingIntent?: AgentIntent;       // emitted this round, resolved next
+  lastIntent?: AgentIntent;          // most recent emitted intent
+  lastPerceivedEvent?: PerceivedEvent; // most recent filtered world event
+  lastResolvedOutcome?: ResolvedOutcome; // resolution of previous-round intent
+}
+
+// v6.5 — Bridge layer types
+export interface AgentIntent {
+  round: number;
+  type: "AVOID" | "RECOVER" | "EXECUTE" | "OPTIMIZE";
+  strength: number;          // 0..1
+  targetId: string | null;   // sampled via softmax over existence_value
+  targetExistenceValue: number;
+}
+
+export interface PerceivedEvent {
+  round: number;
+  kind: "success" | "failure" | "social_feedback" | "mentor" | "event";
+  raw: number;
+  perceived: number;
+  sourceId: string | null;   // null = self-caused
+  existenceValue: number;
+  phenomPenetration: number;
+}
+
+export interface ResolvedOutcome {
+  round: number;              // round in which the intent was emitted
+  resolvedAt: number;         // round in which it was resolved
+  intentType: AgentIntent["type"];
+  effectiveSuccess: number;   // 0..1
+  visibility: number;
+  outcome: "success" | "failure" | "neutral";
 }
 
 export interface ActiveLoop {
