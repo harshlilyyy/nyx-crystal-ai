@@ -1334,6 +1334,10 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     phenomenologicalPenetration: c.phenomenological_penetration ?? 0.5,
     importanceMap: importance,
     topRelevant: importance.slice(0, 3),
+    // v6.5 Bridge
+    lastPerceivedEvent: rt.lastPerceivedEvent,
+    lastIntent: rt.lastIntent,
+    lastResolvedOutcome: rt.lastResolvedOutcome,
   };
 }
 
