@@ -709,6 +709,24 @@ function SimulationPage() {
   );
 }
 
+function buildInstitutionalPayload(
+  sim: Simulation,
+  swarmMode: SwarmMode,
+  framework: InstitutionalFramework | null,
+) {
+  if (!sim.advanced || swarmMode !== "institutional" || !framework) return undefined;
+  const proto = FRAMEWORK_PROTOCOLS[framework];
+  const roleBindings: Record<string, string> = {};
+  sim.agentIds.forEach((id, idx) => {
+    roleBindings[id] = proto.roles[idx % proto.roles.length];
+  });
+  return {
+    framework: FRAMEWORK_LABELS[framework],
+    protocol: proto.protocol,
+    roleBindings,
+  };
+}
+
 function actionBadge(action: string) {
   const map: Record<string, string> = {
     POST: "bg-primary/15 text-primary",
