@@ -152,6 +152,8 @@ function SimulationPage() {
       }
     }
 
+    const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
+
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
       body: {
         task: "round",
@@ -166,6 +168,8 @@ function SimulationPage() {
         runtime: runtime ? runtimeForPrompt(runtime) : undefined,
         events: preEvents,
         pastInsight: sim.advanced ? sim.pastInsight : undefined,
+        swarmMode,
+        institutional: institutionalPayload,
       },
     });
     if (error) throw error;
