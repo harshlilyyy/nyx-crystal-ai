@@ -224,6 +224,8 @@ function SimulationPage() {
       rounds: [...sim.rounds, round],
       status: "running",
       runtime: runtime ?? sim.runtime,
+      swarmMode,
+      institutionalFramework: swarmMode === "institutional" ? framework : null,
     };
     setSim(updated); saveSimulation(updated);
   }
