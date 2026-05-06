@@ -100,6 +100,11 @@ function SimulationPage() {
     }
     setSim(next);
     if (next.advanced) setSimulationSeed(next.prngSeed);
+    // v6.7 — restore swarm mode + framework from sim if present
+    if (next.swarmMode) setSwarmMode(next.swarmMode);
+    if (next.swarmMode === "institutional") {
+      setFramework(next.institutionalFramework ?? autoDetectFramework(next.seed));
+    }
     if (next.rounds.length) {
       setRoundIdx(next.rounds.length);
       const all = next.rounds.flatMap((r) => r.feed);
