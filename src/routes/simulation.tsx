@@ -246,12 +246,15 @@ function SimulationPage() {
     if (!sim) return;
     setRunning(true);
     try {
+      const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
           agentIds: sim.agentIds, rounds: sim.rounds,
           advanced: !!sim.advanced,
           runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+          swarmMode,
+          institutional: institutionalPayload,
         },
       });
       if (error) throw error;
@@ -259,6 +262,23 @@ function SimulationPage() {
       if (sim.advanced) {
         const { analyzeLoops } = await import("@/lib/nyx-causal");
         report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+        // v6.7 — recompute confidence from multi-dimensional breakdown
+        const cb = report.confidenceBreakdown;
+        if (cb && typeof cb.structuralFeasibility === "number") {
+          const fw = swarmMode === "institutional" ? framework : null;
+          const recomputed = computeConfidence({
+            structuralFeasibility: cb.structuralFeasibility,
+            stakeholderAlignment: cb.stakeholderAlignment,
+            riskExposure: cb.riskExposure,
+            evidenceStrength: cb.evidenceStrength,
+            framework: fw,
+          });
+          report = {
+            ...report,
+            confidence: recomputed,
+            confidenceBreakdown: { ...cb, framework: fw ?? null },
+          };
+        }
         // BlackSwan Assassin — runs once after ~65% of rounds completed
         try {
           const cutoff = Math.floor(TOTAL_ROUNDS * 0.65);
@@ -276,7 +296,13 @@ function SimulationPage() {
           console.warn("assassin failed", err);
         }
       }
-      const updated = { ...sim, report, status: "done" as const };
+      const updated = {
+        ...sim,
+        report,
+        status: "done" as const,
+        swarmMode,
+        institutionalFramework: swarmMode === "institutional" ? framework : null,
+      };
       saveSimulation(updated);
       if (sim.advanced) recordLearning(updated, report);
       nav({ to: "/report" });
