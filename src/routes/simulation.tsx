@@ -32,6 +32,16 @@ import {
   setSimulationSeed,
 } from "@/lib/nyx-causal";
 import { deriveInsight, recordLearning } from "@/lib/nyx-learning";
+import {
+  autoDetectFramework,
+  computeConfidence,
+  CONFIDENCE_DIMENSIONS,
+  FRAMEWORK_LABELS,
+  FRAMEWORK_PROTOCOLS,
+  SWARM_MODE_LABELS,
+  type InstitutionalFramework,
+  type SwarmMode,
+} from "@/lib/nyx-institutional";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
