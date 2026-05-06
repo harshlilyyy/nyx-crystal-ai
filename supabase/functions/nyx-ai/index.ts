@@ -251,9 +251,15 @@ Deno.serve(async (req) => {
         ? `\n\nADVANCED CAUSAL MODE — RESPECT STRICTLY:\nEach agent has numeric state, a strategy mode, a self-narrative, opportunity surfaces, and an action bias.\nAgent runtime:\n${JSON.stringify(runtime)}\n\nRules you MUST follow:\n- Speak in each agent's voice CONDITIONED on their current state and narrative.\n- If bias.preferred includes IDLE/MUTE/WITHDRAW, that agent MUST mostly choose those actions (silence, opt-out, or one short withdrawn line).\n- If bias.suppressed includes POST, do not have that agent post boldly.\n- mode "support_collapse": agent withdraws or speaks fragmentary, low-energy lines.\n- mode "optimization": agent posts decisive, high-signal content.\n- mode "avoidance": agent likes/idles, deflects.\n- mode "recovery": tentative comments, tries again.\n- Use the LLM (you) to assess CONDITIONAL outcome probabilities at key moments based on world state — do not invent fixed numbers; only set "outcomeProbabilities" when a moment is pivotal.\n- Random events already happened this round (do not repeat them as posts, but you may have other agents react): ${JSON.stringify(events)}\n- Allowed actions: POST, COMMENT, LIKE, REPOST, IDLE, MUTE, WITHDRAW.`
         : `\n\nStandard Nyx debate mode. Allowed actions: POST, COMMENT, LIKE, REPOST.`;
 
+      // v6.7 — institutional framework prompt injection (advanced + institutional swarm mode only)
+      const institutionalBlock =
+        advanced && payload.institutional
+          ? `\n\nINSTITUTIONAL REASONING LAYER — ACTIVE\nFramework: ${payload.institutional.framework}\nProtocol: ${payload.institutional.protocol}\nRole bindings (override agent personas for this run): ${JSON.stringify(payload.institutional.roleBindings)}\n\nEach agent MUST speak strictly in their assigned institutional role and follow the protocol stage corresponding to round ${payload.round}/${payload.totalRounds}. Maintain adversarial / structured behavior demanded by the role (e.g. Prosecutor pushes guilt, Defense rebuts, Jurors weigh; Pessimists list failure modes; Hypothesis Analysts argue competing causes). Do NOT break role.`
+          : "";
+
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}${advancedBlock}${payload.pastInsight ? `\n\nPRIOR-RUN INSIGHT (from past similar simulations):\n${payload.pastInsight}` : ""}\n\nGenerate 8-12 short feed posts (mix across allowed actions) split between twitter and reddit, each in the agent's distinct voice. Then a 2-sentence director summary. ${advanced ? 'When relevant, include outcomeProbabilities for 1-3 pivotal moments this round.' : ''}`,
-        "You simulate a multi-agent strategy room. Each post 1-2 short sentences, sharp and in-character. In advanced mode, agent psychology dictates action choice.",
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRound ${payload.round} of ${payload.totalRounds}.\nPrior director notes: ${JSON.stringify(payload.prior ?? [])}\nAgents: ${JSON.stringify(agents)}\nOptions: ${JSON.stringify(payload.opts)}${advancedBlock}${institutionalBlock}${payload.pastInsight ? `\n\nPRIOR-RUN INSIGHT (from past similar simulations):\n${payload.pastInsight}` : ""}\n\nGenerate 8-12 short feed posts (mix across allowed actions) split between twitter and reddit, each in the agent's distinct voice. Then a 2-sentence director summary. ${advanced ? 'When relevant, include outcomeProbabilities for 1-3 pivotal moments this round.' : ''}`,
+        "You simulate a multi-agent strategy room. Each post 1-2 short sentences, sharp and in-character. In advanced mode, agent psychology dictates action choice. In institutional mode, agents are role-bound to their assigned institutional position.",
         "round",
         {
           type: "object",
@@ -299,8 +305,14 @@ Deno.serve(async (req) => {
     }
 
     if (task === "report") {
+      const institutionalReportBlock = payload.advanced && payload.institutional
+        ? `\n\nINSTITUTIONAL FRAMEWORK ACTIVE: ${payload.institutional.framework}. Protocol: ${payload.institutional.protocol}. Frame the verdict in the language of this institution (e.g. courtroom: verdict + standard of proof; policy panel: vote outcome + amendments; pre-mortem: top failure modes; grant panel: ranked allocation; intelligence: most-supported hypothesis).`
+        : "";
+      const confidenceRubric = payload.advanced
+        ? `\n\nCONFIDENCE RUBRIC — REQUIRED:\nIn addition to the standard fields, you MUST output a "confidenceBreakdown" object with FOUR independent integer scores 0..10 and a one-sentence justification each. Score them honestly based on the actual simulation dynamics — DO NOT default to a middle value. Variation across scenarios is required.\n\n- structuralFeasibility (0..10): Can the winning path actually be implemented under the scenario's constraints?\n- stakeholderAlignment (0..10): How well does the winner's position align with key stakeholders' interests?\n- riskExposure (0..10, INVERTED): How safe from cascading failure is the winning position? 10 = very safe, 0 = extremely risky.\n- evidenceStrength (0..10): How well-supported is the winner's position by evidence and rebuttal quality observed across rounds?\n\nThe top-level "confidence" field is IGNORED in advanced mode — the client recomputes it from the breakdown using framework-specific weights. Still output a placeholder confidence value (it will be overwritten).`
+        : "";
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}${payload.advanced ? `\n\nADVANCED CAUSAL MODE: Final agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\nIn the report, weight verdict by causal trajectories — who collapsed, who compounded gains, which feedback loops dominated. Use LLM-assessed conditional probabilities, not fixed numbers.` : ""}\n\nProduce a Strategic Forecast Report.`,
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}${payload.advanced ? `\n\nADVANCED CAUSAL MODE: Final agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\nIn the report, weight verdict by causal trajectories — who collapsed, who compounded gains, which feedback loops dominated. Use LLM-assessed conditional probabilities, not fixed numbers.` : ""}${institutionalReportBlock}${confidenceRubric}\n\nProduce a Strategic Forecast Report.`,
         "You are Vera, the Nyx Report Agent. Synthesize the simulation into a clear, decision-ready forecast.",
         "report",
         {
@@ -310,13 +322,32 @@ Deno.serve(async (req) => {
               type: "object",
               properties: {
                 winner: { type: "string", description: "Recommended path or chosen option, one short phrase" },
-                confidence: { type: "number", description: "0..1" },
+                confidence: { type: "number", description: "0..1 (overwritten in advanced mode)" },
                 summary: { type: "string" },
                 bestCase: { type: "string" },
                 worstCase: { type: "string" },
                 hiddenFailures: { type: "array", items: { type: "string" } },
                 timeline: { type: "array", items: { type: "object", properties: { period: { type: "string" }, event: { type: "string" } }, required: ["period", "event"] } },
                 scores: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "number" } }, required: ["label", "value"] } },
+                confidenceBreakdown: {
+                  type: "object",
+                  properties: {
+                    structuralFeasibility: { type: "number", minimum: 0, maximum: 10 },
+                    stakeholderAlignment: { type: "number", minimum: 0, maximum: 10 },
+                    riskExposure: { type: "number", minimum: 0, maximum: 10 },
+                    evidenceStrength: { type: "number", minimum: 0, maximum: 10 },
+                    justifications: {
+                      type: "object",
+                      properties: {
+                        structuralFeasibility: { type: "string" },
+                        stakeholderAlignment: { type: "string" },
+                        riskExposure: { type: "string" },
+                        evidenceStrength: { type: "string" },
+                      },
+                    },
+                  },
+                  required: ["structuralFeasibility", "stakeholderAlignment", "riskExposure", "evidenceStrength"],
+                },
               },
               required: ["winner", "confidence", "summary", "bestCase", "worstCase", "hiddenFailures", "timeline", "scores"],
             },

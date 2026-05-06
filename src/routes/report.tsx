@@ -60,6 +60,9 @@ function ReportPage() {
         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Winner</div>
         <h2 className="mt-1 font-display text-2xl font-semibold text-balance">{r.winner}</h2>
         <ConfidenceGauge value={r.confidence} />
+        {sim.advanced && r.confidenceBreakdown && (
+          <ConfidenceBreakdownBars breakdown={r.confidenceBreakdown} />
+        )}
         {sim.advanced && typeof sim.prngSeed === "number" && (
           <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 font-mono text-[10px] text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-primary">seed</span>
@@ -214,6 +217,40 @@ function ConfidenceGauge({ value }: { value: number }) {
         <span className="font-display text-2xl font-semibold">{Math.round(pct * 100)}%</span>
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">confidence</span>
       </div>
+    </div>
+  );
+}
+
+function ConfidenceBreakdownBars({ breakdown }: { breakdown: NonNullable<Simulation["report"]>["confidenceBreakdown"] }) {
+  if (!breakdown) return null;
+  const dims: { key: keyof NonNullable<typeof breakdown>; label: string }[] = [
+    { key: "structuralFeasibility", label: "Feasibility" },
+    { key: "stakeholderAlignment", label: "Alignment" },
+    { key: "riskExposure", label: "Risk (safe)" },
+    { key: "evidenceStrength", label: "Evidence" },
+  ];
+  return (
+    <div className="mt-4 space-y-1.5 text-left">
+      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Confidence Rubric{breakdown.framework ? ` · ${breakdown.framework}` : ""}
+      </div>
+      {dims.map((d) => {
+        const raw = (breakdown as unknown as Record<string, number>)[d.key as string] ?? 0;
+        const pct = Math.round((raw / 10) * 100);
+        const just = breakdown.justifications?.[d.key as keyof NonNullable<typeof breakdown.justifications>];
+        return (
+          <div key={d.key as string}>
+            <div className="flex items-center justify-between text-[10px]">
+              <span>{d.label}</span>
+              <span className="font-mono tabular-nums">{raw.toFixed(1)}/10</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full gradient-rose" style={{ width: `${pct}%` }} />
+            </div>
+            {just && <div className="mt-0.5 text-[9px] leading-snug text-muted-foreground">{just}</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }

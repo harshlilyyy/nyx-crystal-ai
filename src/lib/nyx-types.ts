@@ -236,6 +236,21 @@ export interface AssassinReport {
   probability?: number;
 }
 
+// v6.7 — multi-dimensional confidence breakdown (derived, not persistent state)
+export interface ConfidenceBreakdownPersisted {
+  structuralFeasibility: number; // 0..10
+  stakeholderAlignment: number;  // 0..10
+  riskExposure: number;          // 0..10 (10 = safe)
+  evidenceStrength: number;      // 0..10
+  justifications?: {
+    structuralFeasibility?: string;
+    stakeholderAlignment?: string;
+    riskExposure?: string;
+    evidenceStrength?: string;
+  };
+  framework?: string | null;
+}
+
 export interface Report {
   winner: string;
   confidence: number;
@@ -247,6 +262,7 @@ export interface Report {
   summary: string;
   loopAnalysis?: LoopAnalysis;
   assassin?: AssassinReport;
+  confidenceBreakdown?: ConfidenceBreakdownPersisted;
 }
 
 export interface Simulation {
@@ -265,6 +281,9 @@ export interface Simulation {
   // v6.4 — reproducibility & learning
   prngSeed?: number;          // mulberry32 seed for stochastic events
   pastInsight?: string;       // injected from prior runs (advanced only)
+  // v6.7 — institutional reasoning layer (prompt-level, no state mutation)
+  swarmMode?: "debate" | "council" | "devils_advocate" | "exploration" | "rapid_fire" | "institutional";
+  institutionalFramework?: "courtroom" | "policy_panel" | "pre_mortem" | "grant_panel" | "intelligence_analysis" | null;
 }
 
 // v6.4 — persistent learning summary (last 30 runs)

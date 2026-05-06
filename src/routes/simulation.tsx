@@ -32,6 +32,16 @@ import {
   setSimulationSeed,
 } from "@/lib/nyx-causal";
 import { deriveInsight, recordLearning } from "@/lib/nyx-learning";
+import {
+  autoDetectFramework,
+  computeConfidence,
+  CONFIDENCE_DIMENSIONS,
+  FRAMEWORK_LABELS,
+  FRAMEWORK_PROTOCOLS,
+  SWARM_MODE_LABELS,
+  type InstitutionalFramework,
+  type SwarmMode,
+} from "@/lib/nyx-institutional";
 import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
@@ -61,6 +71,8 @@ function SimulationPage() {
   const [directorNotes, setDirectorNotes] = useState<string[]>([]);
   const [showControls, setShowControls] = useState(false);
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
+  const [swarmMode, setSwarmMode] = useState<SwarmMode>("debate");
+  const [framework, setFramework] = useState<InstitutionalFramework | null>(null);
 
   useEffect(() => {
     const s = getCurrent();
@@ -88,6 +100,11 @@ function SimulationPage() {
     }
     setSim(next);
     if (next.advanced) setSimulationSeed(next.prngSeed);
+    // v6.7 — restore swarm mode + framework from sim if present
+    if (next.swarmMode) setSwarmMode(next.swarmMode);
+    if (next.swarmMode === "institutional") {
+      setFramework(next.institutionalFramework ?? autoDetectFramework(next.seed));
+    }
     if (next.rounds.length) {
       setRoundIdx(next.rounds.length);
       const all = next.rounds.flatMap((r) => r.feed);
@@ -135,6 +152,8 @@ function SimulationPage() {
       }
     }
 
+    const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
+
     const { data, error } = await supabase.functions.invoke("nyx-ai", {
       body: {
         task: "round",
@@ -149,6 +168,8 @@ function SimulationPage() {
         runtime: runtime ? runtimeForPrompt(runtime) : undefined,
         events: preEvents,
         pastInsight: sim.advanced ? sim.pastInsight : undefined,
+        swarmMode,
+        institutional: institutionalPayload,
       },
     });
     if (error) throw error;
@@ -203,6 +224,8 @@ function SimulationPage() {
       rounds: [...sim.rounds, round],
       status: "running",
       runtime: runtime ?? sim.runtime,
+      swarmMode,
+      institutionalFramework: swarmMode === "institutional" ? framework : null,
     };
     setSim(updated); saveSimulation(updated);
   }
@@ -225,12 +248,15 @@ function SimulationPage() {
     if (!sim) return;
     setRunning(true);
     try {
+      const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
           agentIds: sim.agentIds, rounds: sim.rounds,
           advanced: !!sim.advanced,
           runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+          swarmMode,
+          institutional: institutionalPayload,
         },
       });
       if (error) throw error;
@@ -238,6 +264,23 @@ function SimulationPage() {
       if (sim.advanced) {
         const { analyzeLoops } = await import("@/lib/nyx-causal");
         report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+        // v6.7 — recompute confidence from multi-dimensional breakdown
+        const cb = report.confidenceBreakdown;
+        if (cb && typeof cb.structuralFeasibility === "number") {
+          const fw = swarmMode === "institutional" ? framework : null;
+          const recomputed = computeConfidence({
+            structuralFeasibility: cb.structuralFeasibility,
+            stakeholderAlignment: cb.stakeholderAlignment,
+            riskExposure: cb.riskExposure,
+            evidenceStrength: cb.evidenceStrength,
+            framework: fw,
+          });
+          report = {
+            ...report,
+            confidence: recomputed,
+            confidenceBreakdown: { ...cb, framework: fw ?? null },
+          };
+        }
         // BlackSwan Assassin — runs once after ~65% of rounds completed
         try {
           const cutoff = Math.floor(TOTAL_ROUNDS * 0.65);
@@ -255,7 +298,13 @@ function SimulationPage() {
           console.warn("assassin failed", err);
         }
       }
-      const updated = { ...sim, report, status: "done" as const };
+      const updated = {
+        ...sim,
+        report,
+        status: "done" as const,
+        swarmMode,
+        institutionalFramework: swarmMode === "institutional" ? framework : null,
+      };
       saveSimulation(updated);
       if (sim.advanced) recordLearning(updated, report);
       nav({ to: "/report" });
@@ -303,6 +352,57 @@ function SimulationPage() {
                 <Switch checked={opts[k]} onCheckedChange={(v) => setOpts({ ...opts, [k]: v })} />
               </div>
             ))}
+
+            {sim?.advanced && (
+              <>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span>Swarm Mode</span>
+                  <select
+                    value={swarmMode}
+                    onChange={(e) => {
+                      const v = e.target.value as SwarmMode;
+                      setSwarmMode(v);
+                      if (v === "institutional" && !framework && sim) {
+                        setFramework(autoDetectFramework(sim.seed));
+                      }
+                    }}
+                    className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none"
+                  >
+                    {(Object.keys(SWARM_MODE_LABELS) as SwarmMode[]).map((m) => (
+                      <option key={m} value={m}>{SWARM_MODE_LABELS[m]}</option>
+                    ))}
+                  </select>
+                </div>
+                {swarmMode === "institutional" && (
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex flex-col">
+                      <span>Framework</span>
+                      <span className="text-[10px] text-muted-foreground">auto: {FRAMEWORK_LABELS[autoDetectFramework(sim.seed)]}</span>
+                    </span>
+                    <select
+                      value={framework ?? autoDetectFramework(sim.seed)}
+                      onChange={(e) => setFramework(e.target.value as InstitutionalFramework)}
+                      className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none"
+                    >
+                      {(Object.keys(FRAMEWORK_LABELS) as InstitutionalFramework[]).map((f) => (
+                        <option key={f} value={f}>{FRAMEWORK_LABELS[f]}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {swarmMode === "institutional" && framework && (
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-2 text-[10px]">
+                    <div className="font-semibold uppercase tracking-wider text-primary">Protocol</div>
+                    <div className="mt-0.5 leading-snug text-muted-foreground">{FRAMEWORK_PROTOCOLS[framework].protocol}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {FRAMEWORK_PROTOCOLS[framework].roles.map((r, i) => (
+                        <span key={i} className="rounded-full bg-white/70 px-1.5 py-0.5 font-mono text-[9px]">{r}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -660,6 +760,24 @@ function SimulationPage() {
       )}
     </PageShell>
   );
+}
+
+function buildInstitutionalPayload(
+  sim: Simulation,
+  swarmMode: SwarmMode,
+  framework: InstitutionalFramework | null,
+) {
+  if (!sim.advanced || swarmMode !== "institutional" || !framework) return undefined;
+  const proto = FRAMEWORK_PROTOCOLS[framework];
+  const roleBindings: Record<string, string> = {};
+  sim.agentIds.forEach((id, idx) => {
+    roleBindings[id] = proto.roles[idx % proto.roles.length];
+  });
+  return {
+    framework: FRAMEWORK_LABELS[framework],
+    protocol: proto.protocol,
+    roleBindings,
+  };
 }
 
 function actionBadge(action: string) {
