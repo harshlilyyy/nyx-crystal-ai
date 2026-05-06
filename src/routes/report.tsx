@@ -221,6 +221,40 @@ function ConfidenceGauge({ value }: { value: number }) {
   );
 }
 
+function ConfidenceBreakdownBars({ breakdown }: { breakdown: NonNullable<Simulation["report"]>["confidenceBreakdown"] }) {
+  if (!breakdown) return null;
+  const dims: { key: keyof NonNullable<typeof breakdown>; label: string }[] = [
+    { key: "structuralFeasibility", label: "Feasibility" },
+    { key: "stakeholderAlignment", label: "Alignment" },
+    { key: "riskExposure", label: "Risk (safe)" },
+    { key: "evidenceStrength", label: "Evidence" },
+  ];
+  return (
+    <div className="mt-4 space-y-1.5 text-left">
+      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Confidence Rubric{breakdown.framework ? ` · ${breakdown.framework}` : ""}
+      </div>
+      {dims.map((d) => {
+        const raw = (breakdown as unknown as Record<string, number>)[d.key as string] ?? 0;
+        const pct = Math.round((raw / 10) * 100);
+        const just = breakdown.justifications?.[d.key as keyof NonNullable<typeof breakdown.justifications>];
+        return (
+          <div key={d.key as string}>
+            <div className="flex items-center justify-between text-[10px]">
+              <span>{d.label}</span>
+              <span className="font-mono tabular-nums">{raw.toFixed(1)}/10</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full gradient-rose" style={{ width: `${pct}%` }} />
+            </div>
+            {just && <div className="mt-0.5 text-[9px] leading-snug text-muted-foreground">{just}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AssassinField({ label, value }: { label: string; value: string }) {
   return (
     <div className="mt-2">
