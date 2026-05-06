@@ -60,6 +60,9 @@ function ReportPage() {
         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Winner</div>
         <h2 className="mt-1 font-display text-2xl font-semibold text-balance">{r.winner}</h2>
         <ConfidenceGauge value={r.confidence} />
+        {sim.advanced && r.confidenceBreakdown && (
+          <ConfidenceBreakdownBars breakdown={r.confidenceBreakdown} />
+        )}
         {sim.advanced && typeof sim.prngSeed === "number" && (
           <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 font-mono text-[10px] text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-primary">seed</span>
