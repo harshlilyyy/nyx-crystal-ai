@@ -350,6 +350,57 @@ function SimulationPage() {
                 <Switch checked={opts[k]} onCheckedChange={(v) => setOpts({ ...opts, [k]: v })} />
               </div>
             ))}
+
+            {sim?.advanced && (
+              <>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span>Swarm Mode</span>
+                  <select
+                    value={swarmMode}
+                    onChange={(e) => {
+                      const v = e.target.value as SwarmMode;
+                      setSwarmMode(v);
+                      if (v === "institutional" && !framework && sim) {
+                        setFramework(autoDetectFramework(sim.seed));
+                      }
+                    }}
+                    className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none"
+                  >
+                    {(Object.keys(SWARM_MODE_LABELS) as SwarmMode[]).map((m) => (
+                      <option key={m} value={m}>{SWARM_MODE_LABELS[m]}</option>
+                    ))}
+                  </select>
+                </div>
+                {swarmMode === "institutional" && (
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex flex-col">
+                      <span>Framework</span>
+                      <span className="text-[10px] text-muted-foreground">auto: {FRAMEWORK_LABELS[autoDetectFramework(sim.seed)]}</span>
+                    </span>
+                    <select
+                      value={framework ?? autoDetectFramework(sim.seed)}
+                      onChange={(e) => setFramework(e.target.value as InstitutionalFramework)}
+                      className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none"
+                    >
+                      {(Object.keys(FRAMEWORK_LABELS) as InstitutionalFramework[]).map((f) => (
+                        <option key={f} value={f}>{FRAMEWORK_LABELS[f]}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {swarmMode === "institutional" && framework && (
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-2 text-[10px]">
+                    <div className="font-semibold uppercase tracking-wider text-primary">Protocol</div>
+                    <div className="mt-0.5 leading-snug text-muted-foreground">{FRAMEWORK_PROTOCOLS[framework].protocol}</div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {FRAMEWORK_PROTOCOLS[framework].roles.map((r, i) => (
+                        <span key={i} className="rounded-full bg-white/70 px-1.5 py-0.5 font-mono text-[9px]">{r}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
