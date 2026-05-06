@@ -61,6 +61,8 @@ function SimulationPage() {
   const [directorNotes, setDirectorNotes] = useState<string[]>([]);
   const [showControls, setShowControls] = useState(false);
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
+  const [swarmMode, setSwarmMode] = useState<SwarmMode>("debate");
+  const [framework, setFramework] = useState<InstitutionalFramework | null>(null);
 
   useEffect(() => {
     const s = getCurrent();
