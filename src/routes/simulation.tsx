@@ -372,29 +372,14 @@ function SimulationPage() {
 
       {/* Kernel status (advanced mode only) */}
       {sim?.advanced && (
-        <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
-          {kernel.loading && (
-            <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>
-          )}
-          {useKernelPath && !kernelError && (
-            <span className="font-medium text-primary">
-              ▶ Deterministic Kernel Active (seed: {sim.prngSeed ?? 42})
-            </span>
-          )}
-          {(kernel.error || kernelError) && (
-            <span className="text-muted-foreground">
-              ⚠ Kernel unavailable — using emulated state
-            </span>
-          )}
-          {kernelOutcome && (
-            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
-              <span>rep μ: {kernelOutcome.reputation_mean.toFixed(3)}</span>
-              <span>ineq: {kernelOutcome.inequality.toFixed(3)}</span>
-              <span>trust: {kernelOutcome.trust_proxy.toFixed(3)}</span>
-              <span>centr: {kernelOutcome.centralization.toFixed(3)}</span>
-            </div>
-          )}
-        </div>
+        <KernelHeader
+          loading={kernel.loading}
+          active={useKernelPath && !kernelError}
+          unavailable={!!(kernel.error || kernelError)}
+          seed={sim.prngSeed ?? 42}
+          outcome={kernelOutcome}
+          history={kernelHistory}
+        />
       )}
       <div className="glass rounded-[22px]">
         <button
