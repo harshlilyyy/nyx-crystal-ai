@@ -301,6 +301,8 @@ export interface Simulation {
   // v6.7 — institutional reasoning layer (prompt-level, no state mutation)
   swarmMode?: "debate" | "council" | "devils_advocate" | "exploration" | "rapid_fire" | "institutional";
   institutionalFramework?: "courtroom" | "policy_panel" | "pre_mortem" | "grant_panel" | "intelligence_analysis" | null;
+  // v8 — Hippocampal Episodic Replay (experimental)
+  episodicReplay?: boolean;
 }
 
 // v6.4 — persistent learning summary (last 30 runs)
