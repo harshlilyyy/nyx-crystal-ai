@@ -64,15 +64,24 @@ function extractToolArgs(data: Record<string, unknown>): Record<string, unknown>
   return {};
 }
 
-async function structured(prompt: string, system: string, name: string, parameters: Record<string, unknown>) {
-  const data = await callAI({
+async function structured(
+  prompt: string,
+  system: string,
+  name: string,
+  parameters: Record<string, unknown>,
+  sampling?: { temperature?: number; top_p?: number },
+) {
+  const body: Record<string, unknown> = {
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
     ],
     tools: [{ type: "function", function: { name, description: name, parameters } }],
     tool_choice: { type: "function", function: { name } },
-  });
+  };
+  if (sampling?.temperature !== undefined) body.temperature = sampling.temperature;
+  if (sampling?.top_p !== undefined) body.top_p = sampling.top_p;
+  const data = await callAI(body);
   return extractToolArgs(data);
 }
 
