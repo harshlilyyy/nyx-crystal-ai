@@ -74,6 +74,11 @@ function SimulationPage() {
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
   const [swarmMode, setSwarmMode] = useState<SwarmMode>("debate");
   const [framework, setFramework] = useState<InstitutionalFramework | null>(null);
+  const kernel = useNyxKernel();
+  const [kernelHistory, setKernelHistory] = useState<RoundState[] | null>(null);
+  const [kernelOutcome, setKernelOutcome] = useState<OutcomeVector | null>(null);
+  const [kernelError, setKernelError] = useState<string | null>(null);
+  const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
     const s = getCurrent();
