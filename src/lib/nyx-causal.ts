@@ -1333,6 +1333,32 @@ export function applyV5Round(
 
     rt.core = c;
 
+    // === v8 Hippocampal Episodic Replay — record trace (world-owned) ===
+    if (opts?.episodicReplay) {
+      const dSelf = c.self_worth - preSnap.self_worth;
+      const cascadeNow = !!rt.cascade;
+      const cascadeTriggered = cascadeNow && !cascadeBefore;
+      const salient = Math.abs(dSelf) > 0.15;
+      if (cascadeNow || cascadeTriggered || salient) {
+        if (!rt.episodicBuffer) rt.episodicBuffer = [];
+        const trace: import("./nyx-types").EpisodicTrace = {
+          round: roundIndex,
+          event_type: cascadeNow || cascadeTriggered ? "cascade" : "salient_change",
+          snapshot: preSnap,
+          delta_vector: [
+            +(c.self_worth - preSnap.self_worth).toFixed(4),
+            +(c.anxiety - preSnap.anxiety).toFixed(4),
+            +(c.momentum - preSnap.momentum).toFixed(4),
+            +(c.reputation - preSnap.reputation).toFixed(4),
+            +(c.opportunity_access - preSnap.opportunity_access).toFixed(4),
+          ],
+          valence: dSelf > 0 ? 1 : dSelf < 0 ? -1 : 0,
+        };
+        rt.episodicBuffer.push(trace);
+        if (rt.episodicBuffer.length > 10) rt.episodicBuffer.shift();
+      }
+    }
+
     // === v6.5 Bridge: Mind → World intent emission ===
     // Sample intent type from mode, derive strength, target by softmax(existence_value).
     const modeToIntent: Record<string, "AVOID" | "RECOVER" | "EXECUTE" | "OPTIMIZE"> = {
