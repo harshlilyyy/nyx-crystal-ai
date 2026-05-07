@@ -120,6 +120,25 @@ function SimulationPage() {
     }
   }, [nav]);
 
+  async function ensureKernelRun(): Promise<RoundState[] | null> {
+    if (!sim || !useKernelPath) return null;
+    if (kernelHistory && kernelHistory.length >= TOTAL_ROUNDS) return kernelHistory;
+    try {
+      const scenario = buildKernelScenario(sim, swarmMode);
+      const seed = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+      const result = await kernel.runSimulation(scenario, TOTAL_ROUNDS, seed);
+      setKernelHistory(result.stateHistory);
+      setKernelOutcome(result.outcomeVector);
+      setKernelError(null);
+      return result.stateHistory;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setKernelError(msg);
+      console.warn("Kernel run failed, falling back to emulated state:", msg);
+      return null;
+    }
+  }
+
   async function runRound(i: number) {
     if (!sim) return;
 
@@ -127,6 +146,9 @@ function SimulationPage() {
     if (sim.advanced && typeof sim.prngSeed === "number") {
       setSimulationSeed((sim.prngSeed + i * 0x9e3779b1) | 0);
     }
+
+    // ---- Deterministic kernel pre-compute (advanced + kernel ready) ----
+    const kHistory = useKernelPath ? await ensureKernelRun() : null;
 
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
@@ -155,6 +177,12 @@ function SimulationPage() {
         for (const mf of microFailures) {
           preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
         }
+      }
+
+      // Overwrite runtime CoreState with deterministic kernel-computed values
+      if (kHistory && runtime) {
+        const round = kHistory[Math.min(i, kHistory.length - 1)];
+        if (round) overwriteCoreFromKernel(runtime, round, sim.agentIds);
       }
     }
 
