@@ -44,6 +44,7 @@ import {
 } from "@/lib/nyx-institutional";
 import type { AgentRuntime, ActiveLoop, CoreState } from "@/lib/nyx-types";
 import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from "@/hooks/useNyxKernel";
+import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } from "@/lib/nyx-trajectory";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
