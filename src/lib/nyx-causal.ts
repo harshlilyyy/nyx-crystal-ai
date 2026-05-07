@@ -997,7 +997,8 @@ function rollFlags(rt: AgentRuntime): {
 export function applyV5Round(
   runtime: Record<string, AgentRuntime>,
   roundIndex: number,
-  totalRounds: number
+  totalRounds: number,
+  opts?: { episodicReplay?: boolean }
 ): { agentId: string; kind: string; description: string }[] {
   const all = Object.values(runtime);
   const events: { agentId: string; kind: string; description: string }[] = [];
