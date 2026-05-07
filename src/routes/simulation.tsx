@@ -158,7 +158,7 @@ function SimulationPage() {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
         // v5 — seed-based core engine
-        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS);
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
       } else {
         // v3/v4 fallback (toggle on but no seed-init yet)
         runtime = Object.fromEntries(
