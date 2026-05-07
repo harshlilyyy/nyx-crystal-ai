@@ -942,6 +942,73 @@ function StateChip({ label, v }: { label: string; v: number }) {
   );
 }
 
+function KernelHeader({
+  loading, active, unavailable, seed, outcome, history,
+}: {
+  loading: boolean;
+  active: boolean;
+  unavailable: boolean;
+  seed: number;
+  outcome: OutcomeVector | null;
+  history: RoundState[] | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const trajectory = active && outcome && history ? computeTrajectoryMetrics(history, outcome) : null;
+  const fmt = (n: number) => (n >= 0 ? `+${n.toFixed(3)}` : n.toFixed(3));
+  return (
+    <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
+      {loading && <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>}
+      {active && (
+        <span className="font-medium text-primary">
+          ▶ Deterministic Kernel Active (seed: {seed})
+        </span>
+      )}
+      {unavailable && (
+        <span className="text-muted-foreground">
+          ⚠ Kernel unavailable — using emulated state
+        </span>
+      )}
+      {outcome && (
+        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+          <span>rep μ: {outcome.reputation_mean.toFixed(3)}</span>
+          <span>ineq: {outcome.inequality.toFixed(3)}</span>
+          <span>trust: {outcome.trust_proxy.toFixed(3)}</span>
+          <span>centr: {outcome.centralization.toFixed(3)}</span>
+        </div>
+      )}
+      {trajectory && (
+        <div className="mt-2">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-primary"
+          >
+            <span>Metric Trace</span>
+            <span>{open ? "▾" : "▸"}</span>
+          </button>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-block rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+              VERDICT_MODE_COLORS[trajectory.verdictMode],
+            )}>
+              {VERDICT_MODE_LABELS[trajectory.verdictMode]}
+            </span>
+          </div>
+          {open && (
+            <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+              <span>Δ trust: {fmt(trajectory.deltaTrustProxy)}</span>
+              <span>Δ ineq: {fmt(trajectory.deltaInequality)}</span>
+              <span>polariz: {trajectory.polarizationScore.toFixed(3)}</span>
+              <span>converg: {trajectory.convergenceScore.toFixed(3)}</span>
+              <span>instab: {trajectory.instabilityIndex.toFixed(3)}</span>
+              <span>trend: {trajectory.dominantTrend}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {
   return (
     <div className="glass max-h-[420px] overflow-hidden rounded-[22px] p-3">
