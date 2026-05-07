@@ -158,7 +158,7 @@ function SimulationPage() {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
         // v5 — seed-based core engine
-        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS);
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
       } else {
         // v3/v4 fallback (toggle on but no seed-init yet)
         runtime = Object.fromEntries(
@@ -587,6 +587,55 @@ function SimulationPage() {
                           {cv.name} {cv.value.toFixed(2)} → {cv.affects}
                         </span>
                       ))}
+                    </div>
+                  )}
+                  {sim?.episodicReplay && (
+                    <div className="mt-1.5 rounded-xl bg-secondary/30 px-2 py-1.5">
+                      <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Episodic Memory</div>
+                      {(!rt.episodicBuffer || rt.episodicBuffer.length === 0) ? (
+                        <div className="mt-0.5 text-[10px] italic text-muted-foreground">No salient memories yet.</div>
+                      ) : (
+                        <div className="mt-1 space-y-1">
+                          {rt.episodicBuffer.map((tr, idx) => {
+                            const replayed = rt.lastReplayedTraceRound === tr.round;
+                            return (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  "rounded-lg px-1.5 py-1 text-[10px] font-mono leading-snug",
+                                  replayed ? "bg-[oklch(0.92_0.07_55)] ring-1 ring-primary/40" : "bg-white/60"
+                                )}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="tabular-nums text-muted-foreground">r{tr.round + 1}</span>
+                                  <span className={cn(
+                                    "rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider",
+                                    tr.event_type === "cascade" ? "bg-[oklch(0.93_0.06_25)] text-primary" : "bg-secondary/60 text-secondary-foreground"
+                                  )}>
+                                    {tr.event_type === "cascade" ? "cascade" : "salient"}
+                                  </span>
+                                  <span className={cn(
+                                    "ml-auto text-[10px] font-bold",
+                                    tr.valence > 0 ? "text-[oklch(0.5_0.12_150)]" : tr.valence < 0 ? "text-primary" : "text-muted-foreground"
+                                  )}>
+                                    {tr.valence > 0 ? "↑" : tr.valence < 0 ? "↓" : "·"}
+                                  </span>
+                                  {replayed && (
+                                    <span className="text-[8px] font-bold uppercase tracking-wider text-primary">replay</span>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 flex flex-wrap gap-1 text-[9px] text-muted-foreground">
+                                  <span>sw {tr.snapshot.self_worth.toFixed(2)}</span>
+                                  <span>ax {tr.snapshot.anxiety.toFixed(2)}</span>
+                                  <span>mo {tr.snapshot.momentum.toFixed(2)}</span>
+                                  <span>rp {tr.snapshot.reputation.toFixed(2)}</span>
+                                  <span>op {tr.snapshot.opportunity_access.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

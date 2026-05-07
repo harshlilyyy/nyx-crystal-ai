@@ -176,6 +176,23 @@ export interface AgentRuntime {
   // v6.6 — cognitive dissonance (transient, derived per round)
   contradictionScore?: number;          // 0..1
   topOpposingSources?: (string | null)[]; // 2 most opposing peer ids
+  // v8 — Hippocampal Episodic Replay (world-owned buffer, agent reads only)
+  episodicBuffer?: EpisodicTrace[];     // FIFO, max 10
+  lastReplayedTraceRound?: number | null; // round of trace that triggered replay this round
+}
+
+export interface EpisodicTrace {
+  round: number;
+  event_type: "cascade" | "salient_change";
+  snapshot: {
+    self_worth: number;
+    anxiety: number;
+    momentum: number;
+    reputation: number;
+    opportunity_access: number;
+  };
+  delta_vector: [number, number, number, number, number]; // Δ of the 5 above
+  valence: -1 | 0 | 1;
 }
 
 // v6.5 — Bridge layer types
@@ -284,6 +301,8 @@ export interface Simulation {
   // v6.7 — institutional reasoning layer (prompt-level, no state mutation)
   swarmMode?: "debate" | "council" | "devils_advocate" | "exploration" | "rapid_fire" | "institutional";
   institutionalFramework?: "courtroom" | "policy_panel" | "pre_mortem" | "grant_panel" | "intelligence_analysis" | null;
+  // v8 — Hippocampal Episodic Replay (experimental)
+  episodicReplay?: boolean;
 }
 
 // v6.4 — persistent learning summary (last 30 runs)
