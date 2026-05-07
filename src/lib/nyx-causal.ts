@@ -1160,10 +1160,34 @@ export function applyV5Round(
       c.opportunity_access + 0.25 * (c.consistency * c.reputation > 0.4 ? 1 : 0) + 0.15 * mentor_flag
     );
 
+    // === v8 Hippocampal Episodic Replay (read-only, before self_worth update) ===
+    let replayBoost = 0;
+    rt.lastReplayedTraceRound = null;
+    if (opts?.episodicReplay && c.anxiety > 0.7 && rt.episodicBuffer && rt.episodicBuffer.length > 0) {
+      const cur = [c.self_worth, c.anxiety, c.momentum, c.reputation, c.opportunity_access];
+      const cosine = (a: number[], b: number[]) => {
+        let dot = 0, na = 0, nb = 0;
+        for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+        const d = Math.sqrt(na) * Math.sqrt(nb);
+        return d > 1e-9 ? dot / d : 0;
+      };
+      let best: { sim: number; trace: import("./nyx-types").EpisodicTrace } | null = null;
+      for (const t of rt.episodicBuffer) {
+        const v = [t.snapshot.self_worth, t.snapshot.anxiety, t.snapshot.momentum, t.snapshot.reputation, t.snapshot.opportunity_access];
+        const s = cosine(cur, v);
+        if (!best || s > best.sim) best = { sim: s, trace: t };
+      }
+      if (best && best.sim > 0.8) {
+        replayBoost = 0.05 * best.trace.valence;
+        rt.lastReplayedTraceRound = best.trace.round;
+      }
+    }
+
     c.self_worth = clamp01(
       c.self_worth + 0.25 * progress - 0.3 * Math.max(peer_gap, 0)
       + 0.15 * flags.social_feedback - 0.2 * flags.failure_flag
       + 0.1 * Math.max(effectiveInfluence, 0)
+      + replayBoost
     );
 
     // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
