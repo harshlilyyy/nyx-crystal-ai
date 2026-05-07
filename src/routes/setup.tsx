@@ -194,6 +194,24 @@ function SetupPage() {
                 seed = {sim.prngSeed} · simulations with this seed will replay identically
               </div>
             )}
+            <div
+              className="flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2"
+              title="Agents remember and replay high-salience events when anxious."
+            >
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold">Hippocampal Memory</span>
+                <span className="text-[10px] leading-snug text-muted-foreground">
+                  Episodic Replay — agents recall salient past events under anxiety.
+                </span>
+              </div>
+              <Switch
+                checked={!!sim.episodicReplay}
+                onCheckedChange={(v) => {
+                  const next = { ...sim, episodicReplay: v };
+                  setSim(next); saveSimulation(next);
+                }}
+              />
+            </div>
             <button
               onClick={async () => {
                 const { resetLearning } = await import("@/lib/nyx-learning");
