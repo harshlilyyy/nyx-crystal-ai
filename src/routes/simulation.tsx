@@ -44,6 +44,7 @@ import {
 } from "@/lib/nyx-institutional";
 import type { AgentRuntime, ActiveLoop, CoreState } from "@/lib/nyx-types";
 import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from "@/hooks/useNyxKernel";
+import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } from "@/lib/nyx-trajectory";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -283,6 +284,10 @@ function SimulationPage() {
     setRunning(true);
     try {
       const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
+      const trajectory =
+        useKernelPath && kernelHistory && kernelOutcome
+          ? computeTrajectoryMetrics(kernelHistory, kernelOutcome)
+          : null;
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
@@ -291,6 +296,7 @@ function SimulationPage() {
           runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
           swarmMode,
           institutional: institutionalPayload,
+          trajectory: trajectory ?? undefined,
         },
       });
       if (error) throw error;
@@ -366,29 +372,14 @@ function SimulationPage() {
 
       {/* Kernel status (advanced mode only) */}
       {sim?.advanced && (
-        <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
-          {kernel.loading && (
-            <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>
-          )}
-          {useKernelPath && !kernelError && (
-            <span className="font-medium text-primary">
-              ▶ Deterministic Kernel Active (seed: {sim.prngSeed ?? 42})
-            </span>
-          )}
-          {(kernel.error || kernelError) && (
-            <span className="text-muted-foreground">
-              ⚠ Kernel unavailable — using emulated state
-            </span>
-          )}
-          {kernelOutcome && (
-            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
-              <span>rep μ: {kernelOutcome.reputation_mean.toFixed(3)}</span>
-              <span>ineq: {kernelOutcome.inequality.toFixed(3)}</span>
-              <span>trust: {kernelOutcome.trust_proxy.toFixed(3)}</span>
-              <span>centr: {kernelOutcome.centralization.toFixed(3)}</span>
-            </div>
-          )}
-        </div>
+        <KernelHeader
+          loading={kernel.loading}
+          active={useKernelPath && !kernelError}
+          unavailable={!!(kernel.error || kernelError)}
+          seed={sim.prngSeed ?? 42}
+          outcome={kernelOutcome}
+          history={kernelHistory}
+        />
       )}
       <div className="glass rounded-[22px]">
         <button
@@ -948,6 +939,73 @@ function StateChip({ label, v }: { label: string; v: number }) {
     >
       {label} {v.toFixed(2)}
     </span>
+  );
+}
+
+function KernelHeader({
+  loading, active, unavailable, seed, outcome, history,
+}: {
+  loading: boolean;
+  active: boolean;
+  unavailable: boolean;
+  seed: number;
+  outcome: OutcomeVector | null;
+  history: RoundState[] | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const trajectory = active && outcome && history ? computeTrajectoryMetrics(history, outcome) : null;
+  const fmt = (n: number) => (n >= 0 ? `+${n.toFixed(3)}` : n.toFixed(3));
+  return (
+    <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
+      {loading && <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>}
+      {active && (
+        <span className="font-medium text-primary">
+          ▶ Deterministic Kernel Active (seed: {seed})
+        </span>
+      )}
+      {unavailable && (
+        <span className="text-muted-foreground">
+          ⚠ Kernel unavailable — using emulated state
+        </span>
+      )}
+      {outcome && (
+        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+          <span>rep μ: {outcome.reputation_mean.toFixed(3)}</span>
+          <span>ineq: {outcome.inequality.toFixed(3)}</span>
+          <span>trust: {outcome.trust_proxy.toFixed(3)}</span>
+          <span>centr: {outcome.centralization.toFixed(3)}</span>
+        </div>
+      )}
+      {trajectory && (
+        <div className="mt-2">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-primary"
+          >
+            <span>Metric Trace</span>
+            <span>{open ? "▾" : "▸"}</span>
+          </button>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-block rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+              VERDICT_MODE_COLORS[trajectory.verdictMode],
+            )}>
+              {VERDICT_MODE_LABELS[trajectory.verdictMode]}
+            </span>
+          </div>
+          {open && (
+            <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+              <span>Δ trust: {fmt(trajectory.deltaTrustProxy)}</span>
+              <span>Δ ineq: {fmt(trajectory.deltaInequality)}</span>
+              <span>polariz: {trajectory.polarizationScore.toFixed(3)}</span>
+              <span>converg: {trajectory.convergenceScore.toFixed(3)}</span>
+              <span>instab: {trajectory.instabilityIndex.toFixed(3)}</span>
+              <span>trend: {trajectory.dominantTrend}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

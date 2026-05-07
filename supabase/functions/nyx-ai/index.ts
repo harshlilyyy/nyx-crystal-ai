@@ -64,15 +64,24 @@ function extractToolArgs(data: Record<string, unknown>): Record<string, unknown>
   return {};
 }
 
-async function structured(prompt: string, system: string, name: string, parameters: Record<string, unknown>) {
-  const data = await callAI({
+async function structured(
+  prompt: string,
+  system: string,
+  name: string,
+  parameters: Record<string, unknown>,
+  sampling?: { temperature?: number; top_p?: number },
+) {
+  const body: Record<string, unknown> = {
     messages: [
       { role: "system", content: system },
       { role: "user", content: prompt },
     ],
     tools: [{ type: "function", function: { name, description: name, parameters } }],
     tool_choice: { type: "function", function: { name } },
-  });
+  };
+  if (sampling?.temperature !== undefined) body.temperature = sampling.temperature;
+  if (sampling?.top_p !== undefined) body.top_p = sampling.top_p;
+  const data = await callAI(body);
   return extractToolArgs(data);
 }
 
@@ -311,9 +320,20 @@ Deno.serve(async (req) => {
       const confidenceRubric = payload.advanced
         ? `\n\nCONFIDENCE RUBRIC — REQUIRED:\nIn addition to the standard fields, you MUST output a "confidenceBreakdown" object with FOUR independent integer scores 0..10 and a one-sentence justification each. Score them honestly based on the actual simulation dynamics — DO NOT default to a middle value. Variation across scenarios is required.\n\n- structuralFeasibility (0..10): Can the winning path actually be implemented under the scenario's constraints?\n- stakeholderAlignment (0..10): How well does the winner's position align with key stakeholders' interests?\n- riskExposure (0..10, INVERTED): How safe from cascading failure is the winning position? 10 = very safe, 0 = extremely risky.\n- evidenceStrength (0..10): How well-supported is the winner's position by evidence and rebuttal quality observed across rounds?\n\nThe top-level "confidence" field is IGNORED in advanced mode — the client recomputes it from the breakdown using framework-specific weights. Still output a placeholder confidence value (it will be overwritten).`
         : "";
+      // v6.8 — Trajectory binding (advanced + kernel active): hard-bind verdict
+      // synthesis to deterministic kernel metrics.
+      const trajectory = payload.advanced && payload.trajectory ? payload.trajectory : null;
+      const trajectoryBlock = trajectory
+        ? `\n\nVERDICT MODE: ${trajectory.verdictMode}\n\nDETERMINISTIC KERNEL METRICS (authoritative — your verdict MUST reflect these):\n- Δ reputation_mean: ${Number(trajectory.deltaReputationMean).toFixed(3)}\n- Δ inequality: ${Number(trajectory.deltaInequality).toFixed(3)}\n- Δ trust_proxy: ${Number(trajectory.deltaTrustProxy).toFixed(3)}\n- Δ centralization: ${Number(trajectory.deltaCentralization).toFixed(3)}\n- final centralization: ${Number(trajectory.finalCentralization).toFixed(3)}\n- polarization_score: ${Number(trajectory.polarizationScore).toFixed(3)}\n- convergence_score: ${Number(trajectory.convergenceScore).toFixed(3)}\n- instability_index: ${Number(trajectory.instabilityIndex).toFixed(3)}\n- dominant_trend: ${trajectory.dominantTrend}\n\nHARD VERDICT RULES (MUST be obeyed):\n${(trajectory.hardRules as string[]).map((r: string) => `- ${r}`).join("\n")}`
+        : "";
+
+      const judgeSystem = trajectory
+        ? `VERDICT MODE: ${trajectory.verdictMode}\n\nYou are a simulation adjudicator. You MUST derive conclusions directly from the measured state trajectories and outcome metrics provided below. Do NOT generate compromise conclusions unless the kernel metrics indicate convergence and stability. If metrics indicate polarization, fragmentation, distrust, instability, or asymmetric impact, the verdict MUST explicitly reflect those dynamics. You are translating quantitative evidence into readable language — not inventing a narrative. The narrative layer is downstream of the deterministic kernel; you are NOT allowed to override the kernel-derived classification.`
+        : "You are Vera, the Nyx Report Agent. Synthesize the simulation into a clear, decision-ready forecast.";
+
       const out = await structured(
-        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}${payload.advanced ? `\n\nADVANCED CAUSAL MODE: Final agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\nIn the report, weight verdict by causal trajectories — who collapsed, who compounded gains, which feedback loops dominated. Use LLM-assessed conditional probabilities, not fixed numbers.` : ""}${institutionalReportBlock}${confidenceRubric}\n\nProduce a Strategic Forecast Report.`,
-        "You are Vera, the Nyx Report Agent. Synthesize the simulation into a clear, decision-ready forecast.",
+        `Seed: ${payload.seed}\nOntology: ${JSON.stringify(payload.ontology)}\nRounds (director notes & feed): ${JSON.stringify(payload.rounds)}${payload.advanced ? `\n\nADVANCED CAUSAL MODE: Final agent runtime (state, mode, narrative): ${JSON.stringify(payload.runtime)}\nIn the report, weight verdict by causal trajectories — who collapsed, who compounded gains, which feedback loops dominated. Use LLM-assessed conditional probabilities, not fixed numbers.` : ""}${trajectoryBlock}${institutionalReportBlock}${confidenceRubric}\n\nProduce a Strategic Forecast Report.`,
+        judgeSystem,
         "report",
         {
           type: "object",
@@ -353,7 +373,8 @@ Deno.serve(async (req) => {
             },
           },
           required: ["report"],
-        }
+        },
+        trajectory ? { temperature: 0.3, top_p: 0.7 } : undefined,
       );
       return Response.json(out, { headers: corsHeaders });
     }
