@@ -284,6 +284,10 @@ function SimulationPage() {
     setRunning(true);
     try {
       const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
+      const trajectory =
+        useKernelPath && kernelHistory && kernelOutcome
+          ? computeTrajectoryMetrics(kernelHistory, kernelOutcome)
+          : null;
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "report", seed: sim.seed, ontology: sim.ontology,
@@ -292,6 +296,7 @@ function SimulationPage() {
           runtime: sim.advanced && sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
           swarmMode,
           institutional: institutionalPayload,
+          trajectory: trajectory ?? undefined,
         },
       });
       if (error) throw error;
