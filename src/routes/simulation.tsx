@@ -42,7 +42,8 @@ import {
   type InstitutionalFramework,
   type SwarmMode,
 } from "@/lib/nyx-institutional";
-import type { AgentRuntime, ActiveLoop } from "@/lib/nyx-types";
+import type { AgentRuntime, ActiveLoop, CoreState } from "@/lib/nyx-types";
+import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from "@/hooks/useNyxKernel";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -73,6 +74,11 @@ function SimulationPage() {
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
   const [swarmMode, setSwarmMode] = useState<SwarmMode>("debate");
   const [framework, setFramework] = useState<InstitutionalFramework | null>(null);
+  const kernel = useNyxKernel();
+  const [kernelHistory, setKernelHistory] = useState<RoundState[] | null>(null);
+  const [kernelOutcome, setKernelOutcome] = useState<OutcomeVector | null>(null);
+  const [kernelError, setKernelError] = useState<string | null>(null);
+  const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
     const s = getCurrent();
@@ -114,6 +120,25 @@ function SimulationPage() {
     }
   }, [nav]);
 
+  async function ensureKernelRun(): Promise<RoundState[] | null> {
+    if (!sim || !useKernelPath) return null;
+    if (kernelHistory && kernelHistory.length >= TOTAL_ROUNDS) return kernelHistory;
+    try {
+      const scenario = buildKernelScenario(sim, swarmMode);
+      const seed = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+      const result = await kernel.runSimulation(scenario, TOTAL_ROUNDS, seed);
+      setKernelHistory(result.stateHistory);
+      setKernelOutcome(result.outcomeVector);
+      setKernelError(null);
+      return result.stateHistory;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setKernelError(msg);
+      console.warn("Kernel run failed, falling back to emulated state:", msg);
+      return null;
+    }
+  }
+
   async function runRound(i: number) {
     if (!sim) return;
 
@@ -121,6 +146,9 @@ function SimulationPage() {
     if (sim.advanced && typeof sim.prngSeed === "number") {
       setSimulationSeed((sim.prngSeed + i * 0x9e3779b1) | 0);
     }
+
+    // ---- Deterministic kernel pre-compute (advanced + kernel ready) ----
+    const kHistory = useKernelPath ? await ensureKernelRun() : null;
 
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
@@ -149,6 +177,12 @@ function SimulationPage() {
         for (const mf of microFailures) {
           preEvents.push({ agentId: mf.agentId, kind: `micro_${mf.kind}`, description: mf.description });
         }
+      }
+
+      // Overwrite runtime CoreState with deterministic kernel-computed values
+      if (kHistory && runtime) {
+        const round = kHistory[Math.min(i, kHistory.length - 1)];
+        if (round) overwriteCoreFromKernel(runtime, round, sim.agentIds);
       }
     }
 
@@ -330,7 +364,32 @@ function SimulationPage() {
         </div>
       </div>
 
-      {/* Controls */}
+      {/* Kernel status (advanced mode only) */}
+      {sim?.advanced && (
+        <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
+          {kernel.loading && (
+            <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>
+          )}
+          {useKernelPath && !kernelError && (
+            <span className="font-medium text-primary">
+              ▶ Deterministic Kernel Active (seed: {sim.prngSeed ?? 42})
+            </span>
+          )}
+          {(kernel.error || kernelError) && (
+            <span className="text-muted-foreground">
+              ⚠ Kernel unavailable — using emulated state
+            </span>
+          )}
+          {kernelOutcome && (
+            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+              <span>rep μ: {kernelOutcome.reputation_mean.toFixed(3)}</span>
+              <span>ineq: {kernelOutcome.inequality.toFixed(3)}</span>
+              <span>trust: {kernelOutcome.trust_proxy.toFixed(3)}</span>
+              <span>centr: {kernelOutcome.centralization.toFixed(3)}</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="glass rounded-[22px]">
         <button
           onClick={() => setShowControls((v) => !v)}
@@ -778,6 +837,74 @@ function buildInstitutionalPayload(
     protocol: proto.protocol,
     roleBindings,
   };
+}
+
+function buildKernelScenario(sim: Simulation, swarmMode: SwarmMode): Scenario {
+  const agents = sim.agentIds.map((id) => {
+    const a = NYX_AGENTS.find((x) => x.id === id);
+    const rt = sim.runtime?.[id];
+    const c: CoreState | undefined = rt?.core;
+    const initial_state: Record<string, number> = {};
+    if (c) {
+      initial_state.self_worth = c.self_worth;
+      initial_state.anxiety = c.anxiety;
+      initial_state.consistency = c.consistency;
+      initial_state.momentum = c.momentum;
+      initial_state.reputation = c.reputation;
+      initial_state.opportunity_access = c.opportunity_access;
+      initial_state.fragility_index = c.fragility_index;
+      initial_state.lock_in = c.lock_in;
+      initial_state.learning_rate = c.learning_rate;
+      initial_state.energy = c.energy;
+      initial_state.phenomenological_penetration = c.phenomenological_penetration;
+    }
+    return {
+      name: id,
+      role: a?.role ?? "agent",
+      personality: a?.personality ?? "",
+      initial_state,
+      emotional_anchor: rt?.emotionalAnchor ?? null,
+    };
+  });
+  // Build influence_network from graph edges (default uniform if none)
+  const influence_network: Record<string, Record<string, number>> = {};
+  for (const id of sim.agentIds) influence_network[id] = {};
+  for (const e of sim.graph.edges) {
+    if (sim.agentIds.includes(e.source) && sim.agentIds.includes(e.target)) {
+      influence_network[e.source][e.target] = e.weight ?? 0.5;
+    }
+  }
+  // Tag mode in role suffix so the kernel scenario remains JSON-only
+  if (swarmMode) {
+    for (const ag of agents) ag.role = `${ag.role} [${swarmMode}]`;
+  }
+  return { agents, influence_network };
+}
+
+function overwriteCoreFromKernel(
+  runtime: Record<string, AgentRuntime>,
+  round: RoundState,
+  agentIds: string[],
+) {
+  for (const id of agentIds) {
+    const snap = round.agents[id];
+    const rt = runtime[id];
+    if (!snap || !rt || !rt.core) continue;
+    rt.core.self_worth = snap.self_worth;
+    rt.core.anxiety = snap.anxiety;
+    rt.core.consistency = snap.consistency;
+    rt.core.momentum = snap.momentum;
+    rt.core.reputation = snap.reputation;
+    rt.core.opportunity_access = snap.opportunity_access;
+    rt.core.fragility_index = snap.fragility_index;
+    rt.core.lock_in = snap.lock_in;
+    rt.core.learning_rate = snap.learning_rate;
+    rt.core.energy = snap.energy;
+    if (snap.cascade_active) rt.cascade = true;
+    if (typeof snap.contradiction_score === "number") {
+      rt.contradictionScore = snap.contradiction_score;
+    }
+  }
 }
 
 function actionBadge(action: string) {
