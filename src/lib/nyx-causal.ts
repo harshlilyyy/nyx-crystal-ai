@@ -1013,6 +1013,15 @@ export function applyV5Round(
     const a = NYX_AGENTS.find((x) => x.id === rt.agentId);
     const name = a?.name ?? rt.agentId;
     rt.timePressure = tp;
+    // v8 — capture pre-update snapshot for episodic buffer
+    const preSnap = {
+      self_worth: rt.core.self_worth,
+      anxiety: rt.core.anxiety,
+      momentum: rt.core.momentum,
+      reputation: rt.core.reputation,
+      opportunity_access: rt.core.opportunity_access,
+    };
+    const cascadeBefore = !!rt.cascade;
 
     // Mentor event: deterministic if consistency > 0.7 for 3 consecutive rounds
     rt.consistencyStreak = c.consistency > 0.7 ? (rt.consistencyStreak ?? 0) + 1 : 0;
