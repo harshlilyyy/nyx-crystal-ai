@@ -48,6 +48,11 @@ export const Route = createRootRoute({
         href: appCss,
       },
     ],
+    scripts: [
+      {
+        src: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js",
+      },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
