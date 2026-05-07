@@ -839,6 +839,74 @@ function buildInstitutionalPayload(
   };
 }
 
+function buildKernelScenario(sim: Simulation, swarmMode: SwarmMode): Scenario {
+  const agents = sim.agentIds.map((id) => {
+    const a = NYX_AGENTS.find((x) => x.id === id);
+    const rt = sim.runtime?.[id];
+    const c: CoreState | undefined = rt?.core;
+    const initial_state: Record<string, number> = {};
+    if (c) {
+      initial_state.self_worth = c.self_worth;
+      initial_state.anxiety = c.anxiety;
+      initial_state.consistency = c.consistency;
+      initial_state.momentum = c.momentum;
+      initial_state.reputation = c.reputation;
+      initial_state.opportunity_access = c.opportunity_access;
+      initial_state.fragility_index = c.fragility_index;
+      initial_state.lock_in = c.lock_in;
+      initial_state.learning_rate = c.learning_rate;
+      initial_state.energy = c.energy;
+      initial_state.phenomenological_penetration = c.phenomenological_penetration;
+    }
+    return {
+      name: id,
+      role: a?.role ?? "agent",
+      personality: a?.personality ?? "",
+      initial_state,
+      emotional_anchor: rt?.emotionalAnchor ?? null,
+    };
+  });
+  // Build influence_network from graph edges (default uniform if none)
+  const influence_network: Record<string, Record<string, number>> = {};
+  for (const id of sim.agentIds) influence_network[id] = {};
+  for (const e of sim.graph.edges) {
+    if (sim.agentIds.includes(e.source) && sim.agentIds.includes(e.target)) {
+      influence_network[e.source][e.target] = e.weight ?? 0.5;
+    }
+  }
+  // Tag mode in role suffix so the kernel scenario remains JSON-only
+  if (swarmMode) {
+    for (const ag of agents) ag.role = `${ag.role} [${swarmMode}]`;
+  }
+  return { agents, influence_network };
+}
+
+function overwriteCoreFromKernel(
+  runtime: Record<string, AgentRuntime>,
+  round: RoundState,
+  agentIds: string[],
+) {
+  for (const id of agentIds) {
+    const snap = round.agents[id];
+    const rt = runtime[id];
+    if (!snap || !rt || !rt.core) continue;
+    rt.core.self_worth = snap.self_worth;
+    rt.core.anxiety = snap.anxiety;
+    rt.core.consistency = snap.consistency;
+    rt.core.momentum = snap.momentum;
+    rt.core.reputation = snap.reputation;
+    rt.core.opportunity_access = snap.opportunity_access;
+    rt.core.fragility_index = snap.fragility_index;
+    rt.core.lock_in = snap.lock_in;
+    rt.core.learning_rate = snap.learning_rate;
+    rt.core.energy = snap.energy;
+    if (snap.cascade_active) rt.cascade = true;
+    if (typeof snap.contradiction_score === "number") {
+      rt.contradictionScore = snap.contradiction_score;
+    }
+  }
+}
+
 function actionBadge(action: string) {
   const map: Record<string, string> = {
     POST: "bg-primary/15 text-primary",
