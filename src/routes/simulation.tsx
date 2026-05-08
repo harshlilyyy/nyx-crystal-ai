@@ -79,6 +79,8 @@ function SimulationPage() {
   const [kernelHistory, setKernelHistory] = useState<RoundState[] | null>(null);
   const [kernelOutcome, setKernelOutcome] = useState<OutcomeVector | null>(null);
   const [kernelError, setKernelError] = useState<string | null>(null);
+  const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
+  const [sensRunning, setSensRunning] = useState(false);
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
