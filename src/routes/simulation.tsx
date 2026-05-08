@@ -580,6 +580,48 @@ function SimulationPage() {
                       )}
                     </div>
                   )}
+                  {t.dampingDiagnostics && (
+                    <div className="mt-1.5 rounded-xl bg-secondary/30 px-2 py-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Damping · Stabilization
+                        </div>
+                        {t.lastIntentExplored && (
+                          <span className="rounded-full bg-[oklch(0.92_0.07_55)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-primary">
+                            ε-explore
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[10px] font-mono leading-snug">
+                        <div className="flex items-center justify-between">
+                          <span>Δ rep</span>
+                          <span className={cn(
+                            "tabular-nums",
+                            t.dampingDiagnostics.reputationClamped ? "text-primary font-bold" : "text-muted-foreground"
+                          )}>
+                            {t.dampingDiagnostics.reputationDeltaCapped >= 0 ? "+" : ""}
+                            {t.dampingDiagnostics.reputationDeltaCapped.toFixed(3)}
+                            {t.dampingDiagnostics.reputationClamped && (
+                              <> <span className="text-[9px]">(raw {t.dampingDiagnostics.reputationDeltaRaw >= 0 ? "+" : ""}{t.dampingDiagnostics.reputationDeltaRaw.toFixed(3)})</span></>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Δ opp</span>
+                          <span className={cn(
+                            "tabular-nums",
+                            t.dampingDiagnostics.opportunityClamped ? "text-primary font-bold" : "text-muted-foreground"
+                          )}>
+                            {t.dampingDiagnostics.opportunityDeltaCapped >= 0 ? "+" : ""}
+                            {t.dampingDiagnostics.opportunityDeltaCapped.toFixed(3)}
+                            {t.dampingDiagnostics.opportunityClamped && (
+                              <> <span className="text-[9px]">(raw {t.dampingDiagnostics.opportunityDeltaRaw >= 0 ? "+" : ""}{t.dampingDiagnostics.opportunityDeltaRaw.toFixed(3)})</span></>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {t.customVars.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {t.customVars.map((cv, idx) => (
