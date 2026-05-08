@@ -1334,6 +1334,27 @@ export function applyV5Round(
       (c.phenomenological_penetration ?? 0.5) + 0.1 * c.anxiety - 0.05 * c.consistency
     );
 
+    // === v6.5 Stabilization Layer — rate-of-change soft caps ===
+    // Order invariant: perturb → perception → cognition → modulation → CAPS.
+    // Caps applied last so they constrain the final per-round delta.
+    const REP_CAP = 0.15;
+    const OPP_CAP = 0.20;
+    const repDeltaRaw = c.reputation - preReputation;
+    const oppDeltaRaw = c.opportunity_access - preOpportunityAccess;
+    const repDeltaCapped = Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
+    const oppDeltaCapped = Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
+    c.reputation = clamp01(preReputation + repDeltaCapped);
+    c.opportunity_access = clamp01(preOpportunityAccess + oppDeltaCapped);
+    rt.dampingDiagnostics = {
+      round: roundIndex,
+      reputationDeltaRaw: +repDeltaRaw.toFixed(4),
+      reputationDeltaCapped: +repDeltaCapped.toFixed(4),
+      reputationClamped: Math.abs(repDeltaRaw) > REP_CAP,
+      opportunityDeltaRaw: +oppDeltaRaw.toFixed(4),
+      opportunityDeltaCapped: +oppDeltaCapped.toFixed(4),
+      opportunityClamped: Math.abs(oppDeltaRaw) > OPP_CAP,
+    };
+
     rt.core = c;
 
     // === v8 Hippocampal Episodic Replay — record trace (world-owned) ===
