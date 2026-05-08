@@ -1520,11 +1520,11 @@ export function computeVariablePriorities(
   const EPS = 0.01;
   const all = Object.values(runtime).map((r) => r.core).filter(Boolean) as CoreState[];
   const out: VariablePriority[] = [];
-  for (const v of CORE_VARS) {
-    const cur = rt.core[v] ?? 0;
-    const prev = prevCore[v] ?? 0;
+  for (const v of CORE_KEYS) {
+    const cur = (rt.core[v] ?? 0) as number;
+    const prev = (prevCore[v] ?? 0) as number;
     const delta = cur - prev;
-    const vals = all.map((c) => c[v] ?? 0);
+    const vals = all.map((c) => (c[v] ?? 0) as number);
     const m = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
     const variance = vals.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, vals.length);
     const sigma = Math.sqrt(variance);
