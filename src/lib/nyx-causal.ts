@@ -1495,7 +1495,45 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     lastResolvedOutcome: rt.lastResolvedOutcome,
     contradictionScore: rt.contradictionScore ?? 0,
     topOpposingSources: rt.topOpposingSources ?? [],
+    // v6.5 Stabilization
+    dampingDiagnostics: rt.dampingDiagnostics,
+    lastIntentExplored: !!rt.lastIntentExplored,
   };
+}
+
+// v6.5 Stabilization — telemetry priority ordering.
+// priority_score = |Δ/σ_eff| × (1 − σ) where σ is cross-agent stddev of the var
+// at the current round, and σ_eff = max(σ, ε) to avoid divide-by-zero.
+export interface VariablePriority {
+  variable: keyof CoreState;
+  delta: number;
+  sigma: number;
+  priorityScore: number;
+}
+
+export function computeVariablePriorities(
+  rt: AgentRuntime,
+  prevCore: CoreState | undefined,
+  runtime: Record<string, AgentRuntime>,
+): VariablePriority[] {
+  if (!rt.core || !prevCore) return [];
+  const EPS = 0.01;
+  const all = Object.values(runtime).map((r) => r.core).filter(Boolean) as CoreState[];
+  const out: VariablePriority[] = [];
+  for (const v of CORE_VARS) {
+    const cur = rt.core[v] ?? 0;
+    const prev = prevCore[v] ?? 0;
+    const delta = cur - prev;
+    const vals = all.map((c) => c[v] ?? 0);
+    const m = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+    const variance = vals.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, vals.length);
+    const sigma = Math.sqrt(variance);
+    const sigmaEff = Math.max(sigma, EPS);
+    const priorityScore = Math.abs(delta / sigmaEff) * (1 - Math.min(1, sigma));
+    out.push({ variable: v, delta: +delta.toFixed(4), sigma: +sigma.toFixed(4), priorityScore: +priorityScore.toFixed(4) });
+  }
+  out.sort((a, b) => b.priorityScore - a.priorityScore);
+  return out;
 }
 
 
