@@ -1297,7 +1297,7 @@ export function applyV5Round(
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
     let chosenMode: typeof baseMode = baseMode;
-    if (contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
+    if (!opts?.bypassModulation && contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
       // Build base probs from heuristic affinity scores
       const scores: Record<string, number> = {
         growth: clamp01(c.momentum * 0.6 + c.consistency * 0.4),
