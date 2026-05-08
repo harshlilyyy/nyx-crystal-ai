@@ -179,6 +179,19 @@ export interface AgentRuntime {
   // v8 — Hippocampal Episodic Replay (world-owned buffer, agent reads only)
   episodicBuffer?: EpisodicTrace[];     // FIFO, max 10
   lastReplayedTraceRound?: number | null; // round of trace that triggered replay this round
+  // v6.5 Stabilization — diagnostics (transient, recomputed each round)
+  dampingDiagnostics?: DampingDiagnostics;
+  lastIntentExplored?: boolean;
+}
+
+export interface DampingDiagnostics {
+  round: number;
+  reputationDeltaRaw: number;
+  reputationDeltaCapped: number;
+  reputationClamped: boolean;
+  opportunityDeltaRaw: number;
+  opportunityDeltaCapped: number;
+  opportunityClamped: boolean;
 }
 
 export interface EpisodicTrace {

@@ -1021,6 +1021,9 @@ export function applyV5Round(
       reputation: rt.core.reputation,
       opportunity_access: rt.core.opportunity_access,
     };
+    // v6.5 Stabilization — pre-update reference for rate-of-change caps
+    const preReputation = rt.core.reputation;
+    const preOpportunityAccess = rt.core.opportunity_access;
     const cascadeBefore = !!rt.cascade;
 
     // Mentor event: deterministic if consistency > 0.7 for 3 consecutive rounds
@@ -1331,6 +1334,27 @@ export function applyV5Round(
       (c.phenomenological_penetration ?? 0.5) + 0.1 * c.anxiety - 0.05 * c.consistency
     );
 
+    // === v6.5 Stabilization Layer — rate-of-change soft caps ===
+    // Order invariant: perturb → perception → cognition → modulation → CAPS.
+    // Caps applied last so they constrain the final per-round delta.
+    const REP_CAP = 0.15;
+    const OPP_CAP = 0.20;
+    const repDeltaRaw = c.reputation - preReputation;
+    const oppDeltaRaw = c.opportunity_access - preOpportunityAccess;
+    const repDeltaCapped = Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
+    const oppDeltaCapped = Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
+    c.reputation = clamp01(preReputation + repDeltaCapped);
+    c.opportunity_access = clamp01(preOpportunityAccess + oppDeltaCapped);
+    rt.dampingDiagnostics = {
+      round: roundIndex,
+      reputationDeltaRaw: +repDeltaRaw.toFixed(4),
+      reputationDeltaCapped: +repDeltaCapped.toFixed(4),
+      reputationClamped: Math.abs(repDeltaRaw) > REP_CAP,
+      opportunityDeltaRaw: +oppDeltaRaw.toFixed(4),
+      opportunityDeltaCapped: +oppDeltaCapped.toFixed(4),
+      opportunityClamped: Math.abs(oppDeltaRaw) > OPP_CAP,
+    };
+
     rt.core = c;
 
     // === v8 Hippocampal Episodic Replay — record trace (world-owned) ===
@@ -1373,17 +1397,23 @@ export function applyV5Round(
     const topEdges = [...existenceEdges]
       .sort((a, b) => b.existence_value - a.existence_value)
       .slice(0, 5);
+    // === v6.5 Stabilization — epsilon-greedy intent targeting ===
+    // 80% exploit (highest existence_value); 20% explore (uniform among top edges).
     let targetId: string | null = null;
     let targetEv = 0;
+    let intentExplored = false;
     if (topEdges.length > 0) {
-      const exps = topEdges.map((e) => Math.exp(e.existence_value / 0.3));
-      const sum = exps.reduce((a, b) => a + b, 0);
-      let r = rngRandom() * sum;
-      for (let k = 0; k < topEdges.length; k++) {
-        r -= exps[k];
-        if (r <= 0) { targetId = topEdges[k].to; targetEv = topEdges[k].existence_value; break; }
+      if (rngRandom() < 0.2) {
+        const idx = Math.floor(rngRandom() * topEdges.length);
+        const pick = topEdges[Math.min(idx, topEdges.length - 1)];
+        targetId = pick.to;
+        targetEv = pick.existence_value;
+        intentExplored = true;
+      } else {
+        const best = topEdges[0];
+        targetId = best.to;
+        targetEv = best.existence_value;
       }
-      if (!targetId) { targetId = topEdges[0].to; targetEv = topEdges[0].existence_value; }
     }
     const intent: import("./nyx-types").AgentIntent = {
       round: roundIndex,
@@ -1394,6 +1424,7 @@ export function applyV5Round(
     };
     rt.pendingIntent = intent;
     rt.lastIntent = intent;
+    rt.lastIntentExplored = intentExplored;
   }
 
   return events;
@@ -1464,7 +1495,45 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     lastResolvedOutcome: rt.lastResolvedOutcome,
     contradictionScore: rt.contradictionScore ?? 0,
     topOpposingSources: rt.topOpposingSources ?? [],
+    // v6.5 Stabilization
+    dampingDiagnostics: rt.dampingDiagnostics,
+    lastIntentExplored: !!rt.lastIntentExplored,
   };
+}
+
+// v6.5 Stabilization — telemetry priority ordering.
+// priority_score = |Δ/σ_eff| × (1 − σ) where σ is cross-agent stddev of the var
+// at the current round, and σ_eff = max(σ, ε) to avoid divide-by-zero.
+export interface VariablePriority {
+  variable: keyof CoreState;
+  delta: number;
+  sigma: number;
+  priorityScore: number;
+}
+
+export function computeVariablePriorities(
+  rt: AgentRuntime,
+  prevCore: CoreState | undefined,
+  runtime: Record<string, AgentRuntime>,
+): VariablePriority[] {
+  if (!rt.core || !prevCore) return [];
+  const EPS = 0.01;
+  const all = Object.values(runtime).map((r) => r.core).filter(Boolean) as CoreState[];
+  const out: VariablePriority[] = [];
+  for (const v of CORE_KEYS) {
+    const cur = (rt.core[v] ?? 0) as number;
+    const prev = (prevCore[v] ?? 0) as number;
+    const delta = cur - prev;
+    const vals = all.map((c) => (c[v] ?? 0) as number);
+    const m = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+    const variance = vals.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, vals.length);
+    const sigma = Math.sqrt(variance);
+    const sigmaEff = Math.max(sigma, EPS);
+    const priorityScore = Math.abs(delta / sigmaEff) * (1 - Math.min(1, sigma));
+    out.push({ variable: v, delta: +delta.toFixed(4), sigma: +sigma.toFixed(4), priorityScore: +priorityScore.toFixed(4) });
+  }
+  out.sort((a, b) => b.priorityScore - a.priorityScore);
+  return out;
 }
 
 
