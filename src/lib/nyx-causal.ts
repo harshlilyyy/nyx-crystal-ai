@@ -1341,18 +1341,23 @@ export function applyV5Round(
     const OPP_CAP = 0.20;
     const repDeltaRaw = c.reputation - preReputation;
     const oppDeltaRaw = c.opportunity_access - preOpportunityAccess;
-    const repDeltaCapped = Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
-    const oppDeltaCapped = Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
+    const repCapTriggered = Math.abs(repDeltaRaw) > REP_CAP;
+    const oppCapTriggered = Math.abs(oppDeltaRaw) > OPP_CAP;
+    const bypassCaps = !!opts?.bypassCaps;
+    const repDeltaCapped = bypassCaps ? repDeltaRaw : Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
+    const oppDeltaCapped = bypassCaps ? oppDeltaRaw : Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
     c.reputation = clamp01(preReputation + repDeltaCapped);
     c.opportunity_access = clamp01(preOpportunityAccess + oppDeltaCapped);
     rt.dampingDiagnostics = {
       round: roundIndex,
       reputationDeltaRaw: +repDeltaRaw.toFixed(4),
       reputationDeltaCapped: +repDeltaCapped.toFixed(4),
-      reputationClamped: Math.abs(repDeltaRaw) > REP_CAP,
+      reputationClamped: repCapTriggered && !bypassCaps,
+      reputationCapTriggered: repCapTriggered,
       opportunityDeltaRaw: +oppDeltaRaw.toFixed(4),
       opportunityDeltaCapped: +oppDeltaCapped.toFixed(4),
-      opportunityClamped: Math.abs(oppDeltaRaw) > OPP_CAP,
+      opportunityClamped: oppCapTriggered && !bypassCaps,
+      opportunityCapTriggered: oppCapTriggered,
     };
 
     rt.core = c;
