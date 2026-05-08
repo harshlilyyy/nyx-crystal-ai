@@ -1424,6 +1424,7 @@ export function applyV5Round(
     };
     rt.pendingIntent = intent;
     rt.lastIntent = intent;
+    rt.lastIntentExplored = intentExplored;
   }
 
   return events;
