@@ -1021,6 +1021,9 @@ export function applyV5Round(
       reputation: rt.core.reputation,
       opportunity_access: rt.core.opportunity_access,
     };
+    // v6.5 Stabilization — pre-update reference for rate-of-change caps
+    const preReputation = rt.core.reputation;
+    const preOpportunityAccess = rt.core.opportunity_access;
     const cascadeBefore = !!rt.cascade;
 
     // Mentor event: deterministic if consistency > 0.7 for 3 consecutive rounds
