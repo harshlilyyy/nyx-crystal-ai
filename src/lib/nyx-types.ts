@@ -189,9 +189,11 @@ export interface DampingDiagnostics {
   reputationDeltaRaw: number;
   reputationDeltaCapped: number;
   reputationClamped: boolean;
+  reputationCapTriggered?: boolean;
   opportunityDeltaRaw: number;
   opportunityDeltaCapped: number;
   opportunityClamped: boolean;
+  opportunityCapTriggered?: boolean;
 }
 
 export interface EpisodicTrace {
