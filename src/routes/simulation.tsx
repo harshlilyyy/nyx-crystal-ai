@@ -475,8 +475,6 @@ function SimulationPage() {
         </div>
       )}
 
-      {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
-      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
