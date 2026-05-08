@@ -477,6 +477,115 @@ function SimulationPage() {
 
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
+      {/* Sensitivity & Damping Diagnostics — Advanced only */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
+        <div className="glass rounded-[22px] p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Sensitivity · Damping
+            </div>
+            <button
+              type="button"
+              disabled={sensRunning}
+              onClick={async () => {
+                if (!sim?.runtime) return;
+                setSensRunning(true);
+                await new Promise((r) => setTimeout(r, 0));
+                try {
+                  const { runSensitivityAnalysis } = await import("@/lib/nyx-sensitivity");
+                  const summary = runSensitivityAnalysis(sim.runtime, Math.min(6, Math.max(2, sim.rounds.length || 4)));
+                  setSensitivity(summary);
+                } catch (e) {
+                  toast.error("Sensitivity analysis failed");
+                } finally {
+                  setSensRunning(false);
+                }
+              }}
+              className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {sensRunning ? "Analyzing…" : sensitivity ? "Re-run" : "Run analysis"}
+            </button>
+          </div>
+          {!sensitivity ? (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Probe each core variable with three replays (S_pre_cap, S_raw, S_damped) to expose
+              cap-, network-, or modulation-limited dynamics. Aligned outcome vectors.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-1.5">
+                <div className="rounded-xl bg-secondary/40 px-2 py-1.5">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Damping atten.</div>
+                  <div className="font-mono text-sm tabular-nums">{sensitivity.damping_attenuation_factor.toFixed(2)}</div>
+                </div>
+                <div className="rounded-xl bg-secondary/40 px-2 py-1.5">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Damping ratio</div>
+                  <div className={cn("font-mono text-sm tabular-nums", sensitivity.overDamped && "text-primary font-bold")}>
+                    {sensitivity.damping_ratio.toFixed(3)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-secondary/40 px-2 py-1.5">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Max sens. loss</div>
+                  <div className={cn("font-mono text-sm tabular-nums", sensitivity.max_sensitivity_loss > 5 && "text-primary font-bold")}>
+                    {sensitivity.max_sensitivity_loss === Infinity ? "∞" : sensitivity.max_sensitivity_loss.toFixed(2)}×
+                  </div>
+                </div>
+              </div>
+              {sensitivity.overDamped && (
+                <div className="rounded-xl bg-[oklch(0.93_0.06_25)] px-2 py-1.5 text-[11px] font-medium text-primary">
+                  ⚠ System may be over-damped (mean |S_damped| &lt; 0.5)
+                </div>
+              )}
+              {sensitivity.suppressedVars.length > 0 && (
+                <div className="rounded-xl bg-[oklch(0.92_0.07_55)] px-2 py-1.5 text-[11px] text-primary">
+                  ⚠ High-value signal suppressed: <span className="font-mono font-semibold">{sensitivity.suppressedVars.join(", ")}</span>
+                </div>
+              )}
+              <div className="overflow-hidden rounded-xl bg-white/70">
+                <table className="w-full text-[10px]">
+                  <thead>
+                    <tr className="bg-secondary/40 text-left">
+                      <th className="px-2 py-1 font-semibold uppercase tracking-wider text-muted-foreground">Var</th>
+                      <th className="px-1 py-1 font-semibold uppercase tracking-wider text-muted-foreground">S_pre</th>
+                      <th className="px-1 py-1 font-semibold uppercase tracking-wider text-muted-foreground">S_raw</th>
+                      <th className="px-1 py-1 font-semibold uppercase tracking-wider text-muted-foreground">S_damp</th>
+                      <th className="px-2 py-1 font-semibold uppercase tracking-wider text-muted-foreground">Limit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sensitivity.rows.map((row) => {
+                      const labelColor =
+                        row.classification === "cap-limited" ? "bg-[oklch(0.92_0.06_25)] text-primary" :
+                        row.classification === "network-limited" ? "bg-[oklch(0.93_0.04_300)] text-primary" :
+                        row.classification === "modulation-limited" ? "bg-[oklch(0.92_0.07_55)] text-primary" :
+                        "bg-secondary/60 text-secondary-foreground";
+                      return (
+                        <tr key={row.variable} className="border-t border-secondary/40 font-mono tabular-nums">
+                          <td className="px-2 py-1 font-semibold">{row.variable}</td>
+                          <td className="px-1 py-1">{row.S_pre_cap.toFixed(3)}</td>
+                          <td className="px-1 py-1">{row.S_raw.toFixed(3)}</td>
+                          <td className="px-1 py-1">{row.S_damped.toFixed(3)}</td>
+                          <td className="px-2 py-1">
+                            <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", labelColor)}>
+                              {row.classification === "unconstrained" ? "—" : row.classification.replace("-limited", "")}
+                            </span>
+                            {row.highValueSuppressed && (
+                              <span className="ml-1 text-[9px] text-primary">×{row.ratio_pre_to_damped.toFixed(1)}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
