@@ -1397,17 +1397,23 @@ export function applyV5Round(
     const topEdges = [...existenceEdges]
       .sort((a, b) => b.existence_value - a.existence_value)
       .slice(0, 5);
+    // === v6.5 Stabilization — epsilon-greedy intent targeting ===
+    // 80% exploit (highest existence_value); 20% explore (uniform among top edges).
     let targetId: string | null = null;
     let targetEv = 0;
+    let intentExplored = false;
     if (topEdges.length > 0) {
-      const exps = topEdges.map((e) => Math.exp(e.existence_value / 0.3));
-      const sum = exps.reduce((a, b) => a + b, 0);
-      let r = rngRandom() * sum;
-      for (let k = 0; k < topEdges.length; k++) {
-        r -= exps[k];
-        if (r <= 0) { targetId = topEdges[k].to; targetEv = topEdges[k].existence_value; break; }
+      if (rngRandom() < 0.2) {
+        const idx = Math.floor(rngRandom() * topEdges.length);
+        const pick = topEdges[Math.min(idx, topEdges.length - 1)];
+        targetId = pick.to;
+        targetEv = pick.existence_value;
+        intentExplored = true;
+      } else {
+        const best = topEdges[0];
+        targetId = best.to;
+        targetEv = best.existence_value;
       }
-      if (!targetId) { targetId = topEdges[0].to; targetEv = topEdges[0].existence_value; }
     }
     const intent: import("./nyx-types").AgentIntent = {
       round: roundIndex,
