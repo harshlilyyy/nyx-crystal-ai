@@ -998,7 +998,7 @@ export function applyV5Round(
   runtime: Record<string, AgentRuntime>,
   roundIndex: number,
   totalRounds: number,
-  opts?: { episodicReplay?: boolean }
+  opts?: { episodicReplay?: boolean; bypassCaps?: boolean; bypassModulation?: boolean }
 ): { agentId: string; kind: string; description: string }[] {
   const all = Object.values(runtime);
   const events: { agentId: string; kind: string; description: string }[] = [];
@@ -1205,7 +1205,7 @@ export function applyV5Round(
     // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
     const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
     const context_modifier = sigmoid(c.self_worth - c.anxiety);
-    const effective_peer_gap = peer_gap * (1 + 0.3 * contradictionScore);
+    const effective_peer_gap = peer_gap * (1 + (opts?.bypassModulation ? 0 : 0.3 * contradictionScore));
     const raw_anxiety_change =
       context_modifier * (0.4 * Math.max(effective_peer_gap, 0) + 0.3 * flags.event_driven)
       - 0.2 * flags.success_flag;
@@ -1297,7 +1297,7 @@ export function applyV5Round(
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
     let chosenMode: typeof baseMode = baseMode;
-    if (contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
+    if (!opts?.bypassModulation && contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
       // Build base probs from heuristic affinity scores
       const scores: Record<string, number> = {
         growth: clamp01(c.momentum * 0.6 + c.consistency * 0.4),
@@ -1341,18 +1341,23 @@ export function applyV5Round(
     const OPP_CAP = 0.20;
     const repDeltaRaw = c.reputation - preReputation;
     const oppDeltaRaw = c.opportunity_access - preOpportunityAccess;
-    const repDeltaCapped = Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
-    const oppDeltaCapped = Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
+    const repCapTriggered = Math.abs(repDeltaRaw) > REP_CAP;
+    const oppCapTriggered = Math.abs(oppDeltaRaw) > OPP_CAP;
+    const bypassCaps = !!opts?.bypassCaps;
+    const repDeltaCapped = bypassCaps ? repDeltaRaw : Math.max(-REP_CAP, Math.min(REP_CAP, repDeltaRaw));
+    const oppDeltaCapped = bypassCaps ? oppDeltaRaw : Math.max(-OPP_CAP, Math.min(OPP_CAP, oppDeltaRaw));
     c.reputation = clamp01(preReputation + repDeltaCapped);
     c.opportunity_access = clamp01(preOpportunityAccess + oppDeltaCapped);
     rt.dampingDiagnostics = {
       round: roundIndex,
       reputationDeltaRaw: +repDeltaRaw.toFixed(4),
       reputationDeltaCapped: +repDeltaCapped.toFixed(4),
-      reputationClamped: Math.abs(repDeltaRaw) > REP_CAP,
+      reputationClamped: repCapTriggered && !bypassCaps,
+      reputationCapTriggered: repCapTriggered,
       opportunityDeltaRaw: +oppDeltaRaw.toFixed(4),
       opportunityDeltaCapped: +oppDeltaCapped.toFixed(4),
-      opportunityClamped: Math.abs(oppDeltaRaw) > OPP_CAP,
+      opportunityClamped: oppCapTriggered && !bypassCaps,
+      opportunityCapTriggered: oppCapTriggered,
     };
 
     rt.core = c;
