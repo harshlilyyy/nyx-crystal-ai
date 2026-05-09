@@ -1004,6 +1004,21 @@ export function applyV5Round(
   const events: { agentId: string; kind: string; description: string }[] = [];
   const existenceMatrix = computeExistenceMatrix(runtime);
 
+  // === v7 Target-scoped world friction — collect prior-round intent targets ===
+  // saturation_j = (count of intents targeting j) / N
+  // competition_j = (count of same-type intents targeting j) / max(1, count_j)
+  const N = Math.max(1, all.length);
+  const targetCounts: Record<string, number> = {};
+  const targetTypeCounts: Record<string, Record<string, number>> = {};
+  for (const r of all) {
+    const intent = r.pendingIntent;
+    if (!intent || !intent.targetId) continue;
+    targetCounts[intent.targetId] = (targetCounts[intent.targetId] ?? 0) + 1;
+    const m = targetTypeCounts[intent.targetId] ?? {};
+    m[intent.type] = (m[intent.type] ?? 0) + 1;
+    targetTypeCounts[intent.targetId] = m;
+  }
+
   // global time pressure (grows linearly toward 1.0 by final round)
   const tp = clamp01((roundIndex + 1) / Math.max(1, totalRounds));
 
