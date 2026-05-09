@@ -182,6 +182,14 @@ export interface AgentRuntime {
   // v6.5 Stabilization — diagnostics (transient, recomputed each round)
   dampingDiagnostics?: DampingDiagnostics;
   lastIntentExplored?: boolean;
+  // v7 Decision Intelligence — trajectory encoding & dissonance history
+  trajectoryBias?: number;            // EMA of intent strength (last 4 rounds)
+  trajectoryBiasHistory?: number[];   // last 4 values for sparkline
+  contradictionHistory?: number[];    // last 4 values for sparkline
+  // v7 — target-scoped world friction (transient, derived per round)
+  lastTargetFriction?: { saturation: number; competition: number; effectiveScale: number } | null;
+  // v7 — soft active dissonance flag (transient)
+  lastDissonanceAmplified?: boolean;
 }
 
 export interface DampingDiagnostics {
