@@ -87,6 +87,12 @@ export function recordLearning(sim: Simulation, report: Report): LearningSummary
     confidence: report.confidence,
     prngSeed: sim.prngSeed,
   };
+  // v7 — record divergence-derived highest-sensitivity variable
+  const a = report.assassin;
+  if (a && a.targetVariable && typeof a.sigmaShift === "number") {
+    summary.highSensVar = { variable: a.targetVariable, sigmaShift: a.sigmaShift };
+    summary.injectionUseCount = 0;
+  }
   const all = [summary, ...listLearning().filter((l) => l.id !== sim.id)].slice(0, MAX);
   localStorage.setItem(KEY, JSON.stringify(all));
   return summary;
