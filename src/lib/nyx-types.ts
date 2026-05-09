@@ -349,5 +349,8 @@ export interface LearningSummary {
   outcome: "growth" | "collapse" | "recovery" | "steady" | "fragile" | "spike" | "avoid";
   confidence: number;
   prngSeed?: number;
+  // v7 — divergence-derived insight
+  highSensVar?: { variable: string; sigmaShift: number; lens?: string };
+  injectionUseCount?: number; // for decay 0.8 per reuse
 }
 
