@@ -1063,11 +1063,27 @@ export function applyV5Round(
     // Resolve previous round's emitted intent (one-tick lag), then dampen
     // raw event flags by perceived relevance of their source.
     const phenom = c.phenomenological_penetration ?? 0.5;
+    rt.lastTargetFriction = null;
     // Resolve pending intent from previous round
     if (rt.pendingIntent) {
       const intent = rt.pendingIntent;
       const visibility = clamp01(c.reputation);
-      const effective_success = clamp01(intent.strength * c.opportunity_access * visibility);
+      let effective_success = clamp01(intent.strength * c.opportunity_access * visibility);
+      // === v7 Target-scoped world friction ===
+      if (intent.targetId) {
+        const sat = (targetCounts[intent.targetId] ?? 0) / N;
+        const tCounts = targetTypeCounts[intent.targetId] ?? {};
+        const totalForTarget = targetCounts[intent.targetId] ?? 1;
+        const sameType = tCounts[intent.type] ?? 0;
+        const comp = sameType / Math.max(1, totalForTarget);
+        const scale = Math.max(0.05, 1 - 0.3 * sat - 0.3 * comp);
+        effective_success = clamp01(effective_success * scale);
+        rt.lastTargetFriction = {
+          saturation: +sat.toFixed(3),
+          competition: +comp.toFixed(3),
+          effectiveScale: +scale.toFixed(3),
+        };
+      }
       // Adjust this round's stochastic flags by intent resolution
       if (effective_success > 0.5) {
         flags.success_flag = 1;
