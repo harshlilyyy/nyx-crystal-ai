@@ -335,7 +335,31 @@ function SimulationPage() {
               runtime: sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
             },
           });
-          if (aData?.assassin) report = { ...report, assassin: aData.assassin };
+          if (aData?.assassin) {
+            let assassin = aData.assassin;
+            try {
+              const { runDivergence, coerceCoreVar } = await import("@/lib/nyx-divergence");
+              const tv = coerceCoreVar(assassin.targetVariable) ?? "reputation";
+              const dir: "up" | "down" = assassin.perturbationDirection === "down" ? "down" : "up";
+              if (sim.runtime) {
+                const div = runDivergence(sim.runtime, tv, dir, Math.min(6, Math.max(2, sim.rounds.length || 4)));
+                assassin = {
+                  ...assassin,
+                  targetVariable: tv,
+                  perturbationDirection: dir,
+                  perturbationMagnitude: div.perturbationMagnitude,
+                  baselineOutcome: div.baselineOutcome,
+                  perturbedOutcome: div.perturbedOutcome,
+                  outcomeDistance: div.outcomeDistance,
+                  sensitivityScore: div.sensitivityScore,
+                  sigmaShift: div.sigmaShift,
+                  cascadePath: div.cascadePath,
+                  constraintClassification: div.classification,
+                };
+              }
+            } catch (err) { console.warn("divergence failed", err); }
+            report = { ...report, assassin };
+          }
         } catch (err) {
           console.warn("assassin failed", err);
         }
