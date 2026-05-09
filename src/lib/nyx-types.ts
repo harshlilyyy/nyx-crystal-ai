@@ -274,6 +274,18 @@ export interface AssassinReport {
   breakScenario: string;
   impactIfBroken: string;
   probability?: number;
+  // v7 — divergence mapping
+  targetVariable?: string;
+  perturbationDirection?: "up" | "down";
+  perturbationMagnitude?: number;
+  baselineOutcome?: { reputation_mean: number; inequality: number; trust_proxy: number; centralization: number };
+  perturbedOutcome?: { reputation_mean: number; inequality: number; trust_proxy: number; centralization: number };
+  outcomeDistance?: number;
+  sensitivityScore?: number;
+  cascadePath?: string[];
+  constraintClassification?: "cap-limited" | "network-limited" | "modulation-limited" | "unconstrained";
+  sigmaShift?: number;
+  observerLens?: string;
 }
 
 // v6.7 — multi-dimensional confidence breakdown (derived, not persistent state)
