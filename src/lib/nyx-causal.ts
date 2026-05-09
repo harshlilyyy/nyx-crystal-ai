@@ -1004,6 +1004,21 @@ export function applyV5Round(
   const events: { agentId: string; kind: string; description: string }[] = [];
   const existenceMatrix = computeExistenceMatrix(runtime);
 
+  // === v7 Target-scoped world friction — collect prior-round intent targets ===
+  // saturation_j = (count of intents targeting j) / N
+  // competition_j = (count of same-type intents targeting j) / max(1, count_j)
+  const N = Math.max(1, all.length);
+  const targetCounts: Record<string, number> = {};
+  const targetTypeCounts: Record<string, Record<string, number>> = {};
+  for (const r of all) {
+    const intent = r.pendingIntent;
+    if (!intent || !intent.targetId) continue;
+    targetCounts[intent.targetId] = (targetCounts[intent.targetId] ?? 0) + 1;
+    const m = targetTypeCounts[intent.targetId] ?? {};
+    m[intent.type] = (m[intent.type] ?? 0) + 1;
+    targetTypeCounts[intent.targetId] = m;
+  }
+
   // global time pressure (grows linearly toward 1.0 by final round)
   const tp = clamp01((roundIndex + 1) / Math.max(1, totalRounds));
 
@@ -1048,11 +1063,27 @@ export function applyV5Round(
     // Resolve previous round's emitted intent (one-tick lag), then dampen
     // raw event flags by perceived relevance of their source.
     const phenom = c.phenomenological_penetration ?? 0.5;
+    rt.lastTargetFriction = null;
     // Resolve pending intent from previous round
     if (rt.pendingIntent) {
       const intent = rt.pendingIntent;
       const visibility = clamp01(c.reputation);
-      const effective_success = clamp01(intent.strength * c.opportunity_access * visibility);
+      let effective_success = clamp01(intent.strength * c.opportunity_access * visibility);
+      // === v7 Target-scoped world friction ===
+      if (intent.targetId) {
+        const sat = (targetCounts[intent.targetId] ?? 0) / N;
+        const tCounts = targetTypeCounts[intent.targetId] ?? {};
+        const totalForTarget = targetCounts[intent.targetId] ?? 1;
+        const sameType = tCounts[intent.type] ?? 0;
+        const comp = sameType / Math.max(1, totalForTarget);
+        const scale = Math.max(0.05, 1 - 0.3 * sat - 0.3 * comp);
+        effective_success = clamp01(effective_success * scale);
+        rt.lastTargetFriction = {
+          saturation: +sat.toFixed(3),
+          competition: +comp.toFixed(3),
+          effectiveScale: +scale.toFixed(3),
+        };
+      }
       // Adjust this round's stochastic flags by intent resolution
       if (effective_success > 0.5) {
         flags.success_flag = 1;
@@ -1205,7 +1236,11 @@ export function applyV5Round(
     // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
     const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
     const context_modifier = sigmoid(c.self_worth - c.anxiety);
-    const effective_peer_gap = peer_gap * (1 + (opts?.bypassModulation ? 0 : 0.3 * contradictionScore));
+    // v7 Soft active dissonance: amplify modulation when contradictionScore > 0.6
+    const dissAmp = !opts?.bypassModulation && contradictionScore > 0.6
+      ? (1 + 0.4 * contradictionScore) : 1;
+    rt.lastDissonanceAmplified = dissAmp > 1;
+    const effective_peer_gap = peer_gap * (1 + (opts?.bypassModulation ? 0 : 0.3 * contradictionScore)) * dissAmp;
     const raw_anxiety_change =
       context_modifier * (0.4 * Math.max(effective_peer_gap, 0) + 0.3 * flags.event_driven)
       - 0.2 * flags.success_flag;
@@ -1297,6 +1332,13 @@ export function applyV5Round(
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
     let chosenMode: typeof baseMode = baseMode;
+    // v7 Trajectory bias: EMA of intent strength over last 4 rounds (α=0.4)
+    const tbPrev = rt.trajectoryBias ?? 0.5;
+    const tbNow = clamp01(0.4 * (rt.lastIntent?.strength ?? 0.5) + 0.6 * tbPrev);
+    rt.trajectoryBias = +tbNow.toFixed(4);
+    rt.trajectoryBiasHistory = [...(rt.trajectoryBiasHistory ?? []), rt.trajectoryBias].slice(-4);
+    rt.contradictionHistory = [...(rt.contradictionHistory ?? []), rt.contradictionScore ?? 0].slice(-4);
+
     if (!opts?.bypassModulation && contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
       // Build base probs from heuristic affinity scores
       const scores: Record<string, number> = {
@@ -1307,13 +1349,16 @@ export function applyV5Round(
         avoid: clamp01(c.anxiety * 0.6 + (1 - c.self_worth) * 0.4),
       };
       const EPS2 = 0.001;
-      const T = 1 + 0.2 * contradictionScore;
+      // v7 entropy modulation: when contradiction>0.5 raise T proportional to sw/anx
+      const swAnxRatio = c.self_worth / Math.max(0.05, c.anxiety);
+      const T = 1 + (0.2 + 0.3 * Math.min(2, swAnxRatio)) * contradictionScore;
       const keys = Object.keys(scores);
-      const logits = keys.map((k) => Math.log(scores[k] + EPS2) / T);
+      // v7 trajectory bias added to mode logits (forward modes get +, regressive -)
+      const tbDir: Record<string, number> = { growth: 1, spike: 0.5, steady: 0, recovery: -0.5, avoid: -1 };
+      const logits = keys.map((k) => Math.log(scores[k] + EPS2) / T + 0.25 * (tbDir[k] ?? 0) * (rt.trajectoryBias! - 0.5));
       const maxL = Math.max(...logits);
       const exps = logits.map((l) => Math.exp(l - maxL));
       const sumE = exps.reduce((a, b) => a + b, 0);
-      // Bias preservation: nudge toward base spike/avoid if applicable
       const probs = exps.map((e) => e / sumE);
       if (baseMode === "spike" || baseMode === "avoid") {
         const idx = keys.indexOf(baseMode);
@@ -1503,6 +1548,12 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     // v6.5 Stabilization
     dampingDiagnostics: rt.dampingDiagnostics,
     lastIntentExplored: !!rt.lastIntentExplored,
+    // v7 Decision Intelligence
+    trajectoryBias: rt.trajectoryBias ?? 0.5,
+    trajectoryBiasHistory: rt.trajectoryBiasHistory ?? [],
+    contradictionHistory: rt.contradictionHistory ?? [],
+    lastTargetFriction: rt.lastTargetFriction ?? null,
+    lastDissonanceAmplified: !!rt.lastDissonanceAmplified,
   };
 }
 
