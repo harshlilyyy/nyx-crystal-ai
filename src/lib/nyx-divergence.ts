@@ -7,10 +7,8 @@
 import { applyV5Round, defaultCore } from "./nyx-causal";
 import type { AgentRuntime, CoreState, CoreVar } from "./nyx-types";
 
-const OUTCOME_VARS: CoreVar[] = [
-  "self_worth", "anxiety", "momentum", "reputation",
-  "opportunity_access", "fragility_index", "consistency",
-];
+
+
 
 export interface DivergenceResult {
   variable: CoreVar;
