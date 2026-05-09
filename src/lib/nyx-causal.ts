@@ -1548,6 +1548,12 @@ export function v5Telemetry(rt: AgentRuntime, runtime?: Record<string, AgentRunt
     // v6.5 Stabilization
     dampingDiagnostics: rt.dampingDiagnostics,
     lastIntentExplored: !!rt.lastIntentExplored,
+    // v7 Decision Intelligence
+    trajectoryBias: rt.trajectoryBias ?? 0.5,
+    trajectoryBiasHistory: rt.trajectoryBiasHistory ?? [],
+    contradictionHistory: rt.contradictionHistory ?? [],
+    lastTargetFriction: rt.lastTargetFriction ?? null,
+    lastDissonanceAmplified: !!rt.lastDissonanceAmplified,
   };
 }
 
