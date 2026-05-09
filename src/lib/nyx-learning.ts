@@ -128,5 +128,25 @@ export function deriveInsight(seed: string): string | undefined {
   const topVars = Object.entries(varW).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k);
   const pct = Math.round((topOutcome[1] / totalW) * 100);
   const varsStr = topVars.length ? topVars.join(" + ") : "anxiety + low consistency";
-  return `In ${hits.length} similar past simulation${hits.length > 1 ? "s" : ""}, high ${varsStr} led to "${topOutcome[0]}" outcomes in ${pct}% of cases. Consider this when forming your arguments.`;
+  let base = `In ${hits.length} similar past simulation${hits.length > 1 ? "s" : ""}, high ${varsStr} led to "${topOutcome[0]}" outcomes in ${pct}% of cases. Consider this when forming your arguments.`;
+  // v7 — divergence injection (decay 0.8 per use, gated by recent dominance)
+  const recent2 = sortedRecent.slice(0, 2);
+  const recentDominantVars = new Set(recent2.flatMap((l) => l.topVars));
+  const candidate = hits
+    .map((h) => h.l)
+    .find((l) => l.highSensVar && !recentDominantVars.has(l.highSensVar.variable));
+  if (candidate?.highSensVar) {
+    const uses = candidate.injectionUseCount ?? 0;
+    const decay = Math.pow(0.8, uses);
+    const shift = candidate.highSensVar.sigmaShift * decay;
+    if (shift > 0.05) {
+      base += ` In past runs, small shifts in ${candidate.highSensVar.variable} produced ±${shift.toFixed(2)}σ change.`;
+      // bump use counter
+      try {
+        const list = listLearning().map((l) => l.id === candidate.id ? { ...l, injectionUseCount: uses + 1 } : l);
+        localStorage.setItem(KEY, JSON.stringify(list));
+      } catch { /* ignore */ }
+    }
+  }
+  return base;
 }
