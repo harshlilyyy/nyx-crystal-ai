@@ -1236,7 +1236,11 @@ export function applyV5Round(
     // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
     const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
     const context_modifier = sigmoid(c.self_worth - c.anxiety);
-    const effective_peer_gap = peer_gap * (1 + (opts?.bypassModulation ? 0 : 0.3 * contradictionScore));
+    // v7 Soft active dissonance: amplify modulation when contradictionScore > 0.6
+    const dissAmp = !opts?.bypassModulation && contradictionScore > 0.6
+      ? (1 + 0.4 * contradictionScore) : 1;
+    rt.lastDissonanceAmplified = dissAmp > 1;
+    const effective_peer_gap = peer_gap * (1 + (opts?.bypassModulation ? 0 : 0.3 * contradictionScore)) * dissAmp;
     const raw_anxiety_change =
       context_modifier * (0.4 * Math.max(effective_peer_gap, 0) + 0.3 * flags.event_driven)
       - 0.2 * flags.success_flag;
