@@ -1332,6 +1332,13 @@ export function applyV5Round(
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
     let chosenMode: typeof baseMode = baseMode;
+    // v7 Trajectory bias: EMA of intent strength over last 4 rounds (α=0.4)
+    const tbPrev = rt.trajectoryBias ?? 0.5;
+    const tbNow = clamp01(0.4 * (rt.lastIntent?.strength ?? 0.5) + 0.6 * tbPrev);
+    rt.trajectoryBias = +tbNow.toFixed(4);
+    rt.trajectoryBiasHistory = [...(rt.trajectoryBiasHistory ?? []), rt.trajectoryBias].slice(-4);
+    rt.contradictionHistory = [...(rt.contradictionHistory ?? []), rt.contradictionScore ?? 0].slice(-4);
+
     if (!opts?.bypassModulation && contradictionScore > 0.5 && baseMode !== "collapse" && baseMode !== "fragile") {
       // Build base probs from heuristic affinity scores
       const scores: Record<string, number> = {
@@ -1342,13 +1349,16 @@ export function applyV5Round(
         avoid: clamp01(c.anxiety * 0.6 + (1 - c.self_worth) * 0.4),
       };
       const EPS2 = 0.001;
-      const T = 1 + 0.2 * contradictionScore;
+      // v7 entropy modulation: when contradiction>0.5 raise T proportional to sw/anx
+      const swAnxRatio = c.self_worth / Math.max(0.05, c.anxiety);
+      const T = 1 + (0.2 + 0.3 * Math.min(2, swAnxRatio)) * contradictionScore;
       const keys = Object.keys(scores);
-      const logits = keys.map((k) => Math.log(scores[k] + EPS2) / T);
+      // v7 trajectory bias added to mode logits (forward modes get +, regressive -)
+      const tbDir: Record<string, number> = { growth: 1, spike: 0.5, steady: 0, recovery: -0.5, avoid: -1 };
+      const logits = keys.map((k) => Math.log(scores[k] + EPS2) / T + 0.25 * (tbDir[k] ?? 0) * (rt.trajectoryBias! - 0.5));
       const maxL = Math.max(...logits);
       const exps = logits.map((l) => Math.exp(l - maxL));
       const sumE = exps.reduce((a, b) => a + b, 0);
-      // Bias preservation: nudge toward base spike/avoid if applicable
       const probs = exps.map((e) => e / sumE);
       if (baseMode === "spike" || baseMode === "avoid") {
         const idx = keys.indexOf(baseMode);
