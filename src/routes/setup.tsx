@@ -212,6 +212,7 @@ function SetupPage() {
                 }}
               />
             </div>
+            <V8Toggles sim={sim} setSim={setSim} />
             <button
               onClick={async () => {
                 const { resetLearning } = await import("@/lib/nyx-learning");
