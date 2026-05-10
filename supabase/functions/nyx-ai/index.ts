@@ -422,6 +422,34 @@ Deno.serve(async (req) => {
       return Response.json({ reply }, { headers: corsHeaders });
     }
 
+    if (task === "game_theory") {
+      // v8 — game-theoretic decomposition via Lovable AI Gateway.
+      const agents = payload.agents ?? [];
+      const sys = `You are a game-theory analyst. Given final agent states from a strategic simulation, return STRICT JSON:
+{
+  "nashEquilibria": string[],            // 1-3 short labels
+  "dominantStrategies": [{"agentId": string, "strategy": string}],
+  "paretoFrontier": string[],            // 1-3 short labels
+  "rationalityGap": string,              // 1-2 sentences
+  "summary": string                      // 1-3 sentences
+}
+No prose outside JSON.`;
+      const data = await callAI({
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: `Seed: ${payload.seed}\nRounds: ${payload.rounds}\nAgents:\n${JSON.stringify(agents).slice(0, 4000)}` },
+        ],
+      });
+      // deno-lint-ignore no-explicit-any
+      const raw = (data as any).choices?.[0]?.message?.content ?? "{}";
+      let parsed: Record<string, unknown> = {};
+      try {
+        const m = raw.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(m ? m[0] : raw);
+      } catch { parsed = {}; }
+      return Response.json(parsed, { headers: corsHeaders });
+    }
+
     return new Response(JSON.stringify({ error: "unknown task" }), { status: 400, headers: corsHeaders });
   } catch (e) {
     console.error("nyx-ai error:", e);
