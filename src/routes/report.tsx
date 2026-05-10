@@ -184,7 +184,44 @@ function ReportPage() {
         </Section>
       )}
 
-      {/* Actions */}
+      {/* v8 Game Theory expander (advanced + flag + result present) */}
+      {sim.advanced && sim.v8Flags?.gameTheory && sim.gameTheory && (
+        <Section title="Game Theory" defaultOpen>
+          <div className="space-y-2 text-xs">
+            {sim.gameTheory.summary && <p className="leading-relaxed">{sim.gameTheory.summary}</p>}
+            {sim.gameTheory.nashEquilibria.length > 0 && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Nash equilibria</div>
+                <ul className="mt-0.5 space-y-0.5">{sim.gameTheory.nashEquilibria.map((n, i) => <li key={i}>· {n}</li>)}</ul>
+              </div>
+            )}
+            {sim.gameTheory.dominantStrategies.length > 0 && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Dominant strategies</div>
+                <ul className="mt-0.5 space-y-0.5">
+                  {sim.gameTheory.dominantStrategies.slice(0, 3).map((d, i) => {
+                    const a = NYX_AGENTS.find((x) => x.id === d.agentId);
+                    return <li key={i}>· <span className="font-semibold">{a?.name ?? d.agentId}</span>: {d.strategy}</li>;
+                  })}
+                </ul>
+              </div>
+            )}
+            {sim.gameTheory.paretoFrontier.length > 0 && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Pareto frontier</div>
+                <ul className="mt-0.5 space-y-0.5">{sim.gameTheory.paretoFrontier.map((p, i) => <li key={i}>· {p}</li>)}</ul>
+              </div>
+            )}
+            {sim.gameTheory.rationalityGap && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Rationality gap</div>
+                <p className="mt-0.5 leading-relaxed">{sim.gameTheory.rationalityGap}</p>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={copy} className="glass h-11 rounded-2xl"><Copy className="mr-2 h-4 w-4" />Copy</Button>
         <Button variant="ghost" onClick={shareX} className="glass h-11 rounded-2xl"><Share2 className="mr-2 h-4 w-4" />Share</Button>
