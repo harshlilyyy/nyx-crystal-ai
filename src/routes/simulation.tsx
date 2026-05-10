@@ -513,6 +513,11 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* v8 Adaptive Cognition — experimental panel */}
+      {sim?.advanced && sim.v8Flags && (
+        <V8Panel sim={sim} setSim={setSim} />
+      )}
+
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
