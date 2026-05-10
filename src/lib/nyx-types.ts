@@ -190,6 +190,12 @@ export interface AgentRuntime {
   lastTargetFriction?: { saturation: number; competition: number; effectiveScale: number } | null;
   // v7 — soft active dissonance flag (transient)
   lastDissonanceAmplified?: boolean;
+  // v8 Adaptive Cognition (transient diagnostics)
+  iterationCount?: number;             // # internal settling passes this round
+  hardDissonanceTriggered?: boolean;   // last-round trigger badge
+  hardDissonanceUsed?: boolean;        // once-per-sim guard
+  highContradictionStreak?: number;    // consecutive rounds with cs>0.8
+  perceivedSelfByJ?: Record<string, number>; // i's belief about how j sees i (EMA)
 }
 
 export interface DampingDiagnostics {
@@ -338,6 +344,24 @@ export interface Simulation {
   institutionalFramework?: "courtroom" | "policy_panel" | "pre_mortem" | "grant_panel" | "intelligence_analysis" | null;
   // v8 — Hippocampal Episodic Replay (experimental)
   episodicReplay?: boolean;
+  // v8 — Adaptive Cognition experimental toggles (all default OFF, inert when off)
+  v8Flags?: {
+    iterativeSettling?: boolean;
+    probabilityCloud?: boolean;
+    hardDissonance?: boolean;
+    beliefModeling?: boolean;
+    oasis?: boolean;
+    gameTheory?: boolean;
+    oasisEndpoint?: string;
+  };
+  // v8 — Game Theory analysis result (transient, populated on demand)
+  gameTheory?: {
+    nashEquilibria: string[];
+    dominantStrategies: { agentId: string; strategy: string }[];
+    paretoFrontier: string[];
+    rationalityGap: string;
+    summary: string;
+  };
 }
 
 // v6.4 — persistent learning summary (last 30 runs)
