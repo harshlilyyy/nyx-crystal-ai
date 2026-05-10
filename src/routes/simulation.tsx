@@ -161,6 +161,20 @@ function SimulationPage() {
       if (hasV5(runtime)) {
         // v5 — seed-based core engine
         preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
+        // === v8 Adaptive Cognition (gated, all default off) ===
+        const v8 = sim.v8Flags;
+        if (v8) {
+          const v8mod = await import("@/lib/nyx-v8");
+          if (v8.beliefModeling) v8mod.updateBeliefModeling(runtime, true);
+          for (const rt of Object.values(runtime)) {
+            const eventMag = Math.max(
+              Math.abs(rt.dampingDiagnostics?.reputationDeltaRaw ?? 0) / 0.15,
+              Math.abs(rt.dampingDiagnostics?.opportunityDeltaRaw ?? 0) / 0.20,
+            );
+            if (v8.iterativeSettling) v8mod.maybeIterativeSettle(rt, true, eventMag);
+            if (v8.hardDissonance) v8mod.maybeHardDissonance(rt, true);
+          }
+        }
       } else {
         // v3/v4 fallback (toggle on but no seed-init yet)
         runtime = Object.fromEntries(
@@ -497,6 +511,11 @@ function SimulationPage() {
           <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Past-run insight</div>
           <p className="mt-1 text-xs leading-snug text-muted-foreground">{sim.pastInsight}</p>
         </div>
+      )}
+
+      {/* v8 Adaptive Cognition — experimental panel */}
+      {sim?.advanced && sim.v8Flags && (
+        <V8Panel sim={sim} setSim={setSim} />
       )}
 
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
@@ -1282,5 +1301,114 @@ function MiniGraph({ nodes, edges, pulse }: { nodes: { id: string; group: number
         return <circle key={n.id} cx={p.x} cy={p.y} r={7} fill={palette[n.group % palette.length]} className={pulse ? "animate-pulse-soft" : ""} />;
       })}
     </svg>
+  );
+}
+
+function V8Panel({ sim, setSim }: { sim: Simulation; setSim: (s: Simulation) => void }) {
+  const flags = sim.v8Flags ?? {};
+  const [cloud, setCloud] = useState<import("@/lib/nyx-v8").CloudResult | null>(null);
+  const [cloudProgress, setCloudProgress] = useState<{ done: number; total: number } | null>(null);
+  const [cloudRunning, setCloudRunning] = useState(false);
+  const [oasisStatus, setOasisStatus] = useState<"unknown" | "ok" | "down">("unknown");
+  const [gtRunning, setGtRunning] = useState(false);
+
+  const iters = sim.runtime ? Object.values(sim.runtime).map((rt) => rt.iterationCount ?? 0) : [];
+  const maxIter = iters.length ? Math.max(...iters) : 0;
+  const hardTriggered = sim.runtime ? Object.values(sim.runtime).filter((rt) => rt.hardDissonanceTriggered).map((rt) => rt.agentId) : [];
+
+  async function runCloud() {
+    if (!sim.runtime) return;
+    setCloudRunning(true); setCloud(null); setCloudProgress(null);
+    try {
+      const { runProbabilityCloud } = await import("@/lib/nyx-v8");
+      const res = await runProbabilityCloud(sim.runtime, Math.max(2, sim.rounds.length || 4), {
+        runs: 30, onProgress: (d, t) => setCloudProgress({ done: d, total: t }),
+      });
+      if (!res) { toast.error("Cloud auto-disabled (>50 agents)"); return; }
+      setCloud(res);
+    } catch { toast.error("Cloud run failed"); }
+    finally { setCloudRunning(false); }
+  }
+  async function probeOasis() {
+    const { checkOasisReachable } = await import("@/lib/nyx-v8");
+    const ok = await checkOasisReachable(flags.oasisEndpoint);
+    setOasisStatus(ok ? "ok" : "down");
+    if (!ok) toast.error("OASIS endpoint unreachable — fallback active");
+  }
+  async function runGameTheory() {
+    setGtRunning(true);
+    try {
+      const { runGameTheoryAnalysis } = await import("@/lib/nyx-v8");
+      const gt = await runGameTheoryAnalysis(sim);
+      if (!gt) { toast.error("Game-theory analysis unavailable"); return; }
+      const next = { ...sim, gameTheory: gt };
+      setSim(next); saveSimulation(next);
+      toast.success("Game theory ready — see report");
+    } finally { setGtRunning(false); }
+  }
+
+  const any = flags.iterativeSettling || flags.probabilityCloud || flags.hardDissonance || flags.beliefModeling || flags.oasis || flags.gameTheory;
+  if (!any) return null;
+  return (
+    <div className="glass rounded-[22px] p-4 space-y-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">v8 Adaptive Cognition · Experimental</div>
+      {flags.iterativeSettling && (
+        <div className="rounded-xl bg-secondary/40 px-2.5 py-1.5 text-[11px]">
+          Iterative settling · max iterations this round: <span className="font-mono font-semibold">{maxIter || 1}</span>
+        </div>
+      )}
+      {flags.hardDissonance && hardTriggered.length > 0 && (
+        <div className="rounded-xl bg-[oklch(0.92_0.06_25)] px-2.5 py-1.5 text-[11px] text-primary">
+          ⚠ Experimental — hard dissonance triggered: <span className="font-mono font-semibold">{hardTriggered.join(", ")}</span>
+        </div>
+      )}
+      {flags.beliefModeling && (
+        <div className="rounded-xl bg-secondary/40 px-2.5 py-1.5 text-[11px]">
+          Belief modeling active · <span className="text-muted-foreground">perceived_self_by_j tracked across {sim.runtime ? Object.keys(sim.runtime).length : 0} agents</span>
+        </div>
+      )}
+      {flags.probabilityCloud && (
+        <div className="rounded-xl bg-secondary/40 p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold">Probability Cloud</span>
+            <button onClick={runCloud} disabled={cloudRunning} className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-semibold text-primary-foreground disabled:opacity-50">
+              {cloudRunning ? "Running…" : cloud ? "Re-run" : "Run 30×"}
+            </button>
+          </div>
+          {cloudRunning && cloudProgress && (
+            <div className="h-1 overflow-hidden rounded-full bg-muted">
+              <div className="h-full gradient-rose transition-all" style={{ width: `${(cloudProgress.done / cloudProgress.total) * 100}%` }} />
+            </div>
+          )}
+          {cloud && (
+            <div className="grid grid-cols-2 gap-1.5 font-mono text-[10px]">
+              {(["reputation_mean", "inequality", "trust_proxy", "centralization"] as const).map((k) => {
+                const m = cloud.byMetric[k];
+                return (
+                  <div key={k} className="rounded-lg bg-white/70 px-2 py-1">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">{k}</div>
+                    <div>μ {m.mean.toFixed(2)} · p25–p75 [{m.p25.toFixed(2)}, {m.p75.toFixed(2)}]</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {flags.oasis && (
+        <div className="rounded-xl bg-secondary/40 px-2.5 py-1.5 text-[11px] flex items-center justify-between">
+          <span>OASIS · {oasisStatus === "ok" ? "✅ reachable" : oasisStatus === "down" ? "❌ fallback active" : "not probed"}</span>
+          <button onClick={probeOasis} className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">Probe</button>
+        </div>
+      )}
+      {flags.gameTheory && (
+        <div className="rounded-xl bg-secondary/40 px-2.5 py-1.5 text-[11px] flex items-center justify-between">
+          <span>Game Theory · {sim.gameTheory ? "✅ ready" : "not yet computed"}</span>
+          <button onClick={runGameTheory} disabled={gtRunning} className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground disabled:opacity-50">
+            {gtRunning ? "…" : "Analyze"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

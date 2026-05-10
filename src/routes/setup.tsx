@@ -212,6 +212,7 @@ function SetupPage() {
                 }}
               />
             </div>
+            <V8Toggles sim={sim} setSim={setSim} />
             <button
               onClick={async () => {
                 const { resetLearning } = await import("@/lib/nyx-learning");
@@ -387,5 +388,48 @@ function ForceGraph({ nodes, edges }: { nodes: { id: string; label: string; grou
         );
       })}
     </svg>
+  );
+}
+
+function V8Toggles({ sim, setSim }: { sim: Simulation; setSim: (s: Simulation) => void }) {
+  const flags = sim.v8Flags ?? {};
+  const set = (patch: Partial<NonNullable<Simulation["v8Flags"]>>) => {
+    const next: Simulation = { ...sim, v8Flags: { ...flags, ...patch } };
+    setSim(next); saveSimulation(next);
+  };
+  type ToggleKey = "iterativeSettling" | "probabilityCloud" | "hardDissonance" | "beliefModeling" | "oasis" | "gameTheory";
+  const items: { key: ToggleKey; label: string; hint: string; warn?: string }[] = [
+    { key: "iterativeSettling", label: "Iterative Settling", hint: "Up to 3 internal passes when contradiction × event > thresholds." },
+    { key: "probabilityCloud", label: "Probability Cloud", hint: "30–50 noisy replays for outcome distributions." },
+    { key: "hardDissonance", label: "Hard Active Dissonance", hint: "One-time self_worth jump after 3 rounds of cs>0.8.", warn: "⚠ HIGH RISK" },
+    { key: "beliefModeling", label: "Cross-Agent Belief", hint: "Each agent models how peers see it (EMA)." },
+    { key: "oasis", label: "OASIS Backend", hint: "Replace world layer with external endpoint when reachable.", warn: "⚠ REQUIRES BACKEND" },
+    { key: "gameTheory", label: "Game-Theoretic Analysis", hint: "Post-sim Nash / Pareto / dominance via AI Gateway." },
+  ];
+  return (
+    <div className="rounded-2xl bg-white/40 p-2 space-y-1.5">
+      <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-primary">v8 Adaptive Cognition · Experimental</div>
+      {items.map((it) => (
+        <div key={it.key} className="flex items-center justify-between gap-2 rounded-xl bg-white/60 px-2.5 py-1.5">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold flex items-center gap-1.5">
+              {it.label}
+              {it.warn && <span className="rounded-full bg-[oklch(0.92_0.06_25)] px-1.5 py-0.5 text-[8px] font-bold text-primary">{it.warn}</span>}
+            </div>
+            <div className="text-[10px] leading-snug text-muted-foreground">{it.hint}</div>
+          </div>
+          <Switch checked={!!flags[it.key]} onCheckedChange={(v) => set({ [it.key]: v })} />
+        </div>
+      ))}
+      {flags.oasis && (
+        <input
+          type="url"
+          value={flags.oasisEndpoint ?? ""}
+          placeholder="https://oasis.example.com"
+          onChange={(e) => set({ oasisEndpoint: e.target.value })}
+          className="w-full rounded-xl bg-white/70 px-2.5 py-1 text-[11px] font-mono outline-none ring-1 ring-border focus:ring-primary/40"
+        />
+      )}
+    </div>
   );
 }
