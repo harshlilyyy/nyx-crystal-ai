@@ -161,6 +161,20 @@ function SimulationPage() {
       if (hasV5(runtime)) {
         // v5 — seed-based core engine
         preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
+        // === v8 Adaptive Cognition (gated, all default off) ===
+        const v8 = sim.v8Flags;
+        if (v8) {
+          const v8mod = await import("@/lib/nyx-v8");
+          if (v8.beliefModeling) v8mod.updateBeliefModeling(runtime, true);
+          for (const rt of Object.values(runtime)) {
+            const eventMag = Math.max(
+              Math.abs(rt.dampingDiagnostics?.reputationDeltaRaw ?? 0) / 0.15,
+              Math.abs(rt.dampingDiagnostics?.opportunityDeltaRaw ?? 0) / 0.20,
+            );
+            if (v8.iterativeSettling) v8mod.maybeIterativeSettle(rt, true, eventMag);
+            if (v8.hardDissonance) v8mod.maybeHardDissonance(rt, true);
+          }
+        }
       } else {
         // v3/v4 fallback (toggle on but no seed-init yet)
         runtime = Object.fromEntries(
