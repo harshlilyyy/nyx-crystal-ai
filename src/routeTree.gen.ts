@@ -13,6 +13,7 @@ import { Route as SimulationRouteImport } from './routes/simulation'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ReportRouteImport } from './routes/report'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -36,6 +37,11 @@ const OutcomesRoute = OutcomesRouteImport.update({
   path: '/outcomes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
@@ -50,6 +56,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
@@ -77,16 +86,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agents'
+    | '/login'
     | '/outcomes'
     | '/report'
     | '/setup'
     | '/simulation'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agents' | '/outcomes' | '/report' | '/setup' | '/simulation'
+  to:
+    | '/'
+    | '/agents'
+    | '/login'
+    | '/outcomes'
+    | '/report'
+    | '/setup'
+    | '/simulation'
   id:
     | '__root__'
     | '/'
     | '/agents'
+    | '/login'
     | '/outcomes'
     | '/report'
     | '/setup'
@@ -96,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
+  LoginRoute: typeof LoginRoute
   OutcomesRoute: typeof OutcomesRoute
   ReportRoute: typeof ReportRoute
   SetupRoute: typeof SetupRoute
@@ -132,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OutcomesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agents': {
       id: '/agents'
       path: '/agents'
@@ -152,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
+  LoginRoute: LoginRoute,
   OutcomesRoute: OutcomesRoute,
   ReportRoute: ReportRoute,
   SetupRoute: SetupRoute,
@@ -160,3 +187,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
