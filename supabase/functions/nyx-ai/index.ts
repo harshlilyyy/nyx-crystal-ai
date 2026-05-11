@@ -35,11 +35,14 @@ function clampJson(v: unknown, max = MAX_JSON_CHARS): unknown {
 async function verifyAuth(req: Request): Promise<boolean> {
   const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
-  const token = authHeader.slice(7);
+  const token = authHeader.slice(7).trim();
   if (!token) return false;
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
   if (!url || !anon) return false;
+  // Accept the project anon/publishable key (enforces caller knows the project key)
+  if (token === anon) return true;
+  // Otherwise require a valid user JWT
   try {
     const supabase = createClient(url, anon, {
       global: { headers: { Authorization: `Bearer ${token}` } },
