@@ -76,15 +76,33 @@ function RootShell({ children }: { children: React.ReactNode }) {
 import { TabBar } from "@/components/TabBar";
 import { Toaster } from "@/components/ui/sonner";
 import { CosmicArena } from "@/components/CosmicArena";
+import { useAuth } from "@/hooks/useAuth";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+const PUBLIC_ROUTES = new Set(["/login"]);
 
 function RootComponent() {
+  const { isAuthenticated, loading } = useAuth();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const isPublic = PUBLIC_ROUTES.has(pathname);
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated && !isPublic) {
+      navigate({ to: "/login" });
+    }
+  }, [loading, isAuthenticated, isPublic, navigate]);
+
+  const showApp = isAuthenticated || isPublic;
+
   return (
     <>
       <CosmicArena />
       <div className="relative z-10">
-        <Outlet />
+        {loading && !isPublic ? null : showApp ? <Outlet /> : null}
       </div>
-      <TabBar />
+      {isAuthenticated && !isPublic && <TabBar />}
       <Toaster position="top-center" />
     </>
   );
