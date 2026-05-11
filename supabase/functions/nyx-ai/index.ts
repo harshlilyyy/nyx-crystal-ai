@@ -155,8 +155,9 @@ Deno.serve(async (req) => {
     if ("runtime" in payload) payload.runtime = clampJson(payload.runtime);
     if ("prior" in payload) payload.prior = clampJson(payload.prior);
     if ("history" in payload && Array.isArray(payload.history)) {
+      const ALLOWED_ROLES = new Set(["user", "assistant"]);
       payload.history = payload.history.slice(-12).map((m: { role?: string; content?: unknown }) => ({
-        role: typeof m?.role === "string" ? m.role : "user",
+        role: ALLOWED_ROLES.has(m?.role as string) ? (m.role as string) : "user",
         content: clampStr(m?.content, 2000),
       }));
     }
