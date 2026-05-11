@@ -2,11 +2,55 @@
 // Handles tasks: ontology, graph, round, report, chat
 // Uses Lovable AI Gateway with structured tool-calling for JSON.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const ALLOWED_TASKS = new Set([
+  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory",
+]);
+
+const MAX_STR = 4000;
+const MAX_JSON_CHARS = 20000;
+
+function clampStr(v: unknown, max = MAX_STR): string {
+  if (typeof v !== "string") return "";
+  return v.length > max ? v.slice(0, max) : v;
+}
+
+function clampJson(v: unknown, max = MAX_JSON_CHARS): unknown {
+  try {
+    const s = JSON.stringify(v ?? null);
+    if (s.length <= max) return v;
+    // Truncate by re-serializing as a safe stub
+    return { _truncated: true, preview: s.slice(0, 1000) };
+  } catch {
+    return null;
+  }
+}
+
+async function verifyAuth(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7);
+  if (!token) return false;
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+  if (!url || !anon) return false;
+  try {
+    const supabase = createClient(url, anon, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(token);
+    return !error && !!data?.user;
+  } catch {
+    return false;
+  }
+}
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-2.5-flash";
