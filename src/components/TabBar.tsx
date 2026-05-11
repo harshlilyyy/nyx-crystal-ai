@@ -1,8 +1,10 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Sparkles, Users, Activity, FileText } from "lucide-react";
+import { Home, Sparkles, Users, Activity, FileText, Compass } from "lucide-react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { getCurrent } from "@/lib/nyx-store";
 
-const tabs = [
+const baseTabs = [
   { to: "/", label: "Home", icon: Home },
   { to: "/setup", label: "Setup", icon: Sparkles },
   { to: "/agents", label: "Agents", icon: Users },
@@ -10,8 +12,26 @@ const tabs = [
   { to: "/report", label: "Report", icon: FileText },
 ] as const;
 
+const outcomesTab = { to: "/outcomes", label: "Outcomes", icon: Compass } as const;
+
 export function TabBar() {
   const { pathname } = useLocation();
+  const [showOutcomes, setShowOutcomes] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const s = getCurrent();
+      setShowOutcomes(!!(s && s.advanced && s.status === "done"));
+    };
+    check();
+    const onStorage = () => check();
+    window.addEventListener("storage", onStorage);
+    const id = window.setInterval(check, 1500);
+    return () => { window.removeEventListener("storage", onStorage); window.clearInterval(id); };
+  }, [pathname]);
+
+  const tabs = showOutcomes ? [...baseTabs, outcomesTab] : baseTabs;
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50"

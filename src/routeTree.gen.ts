@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SimulationRouteImport } from './routes/simulation'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ReportRouteImport } from './routes/report'
+import { Route as OutcomesRouteImport } from './routes/outcomes'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const ReportRoute = ReportRouteImport.update({
   path: '/report',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutcomesRoute = OutcomesRouteImport.update({
+  id: '/outcomes',
+  path: '/outcomes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
   '/simulation': typeof SimulationRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
   '/simulation': typeof SimulationRoute
@@ -59,21 +67,36 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
+  '/outcomes': typeof OutcomesRoute
   '/report': typeof ReportRoute
   '/setup': typeof SetupRoute
   '/simulation': typeof SimulationRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agents' | '/report' | '/setup' | '/simulation'
+  fullPaths:
+    | '/'
+    | '/agents'
+    | '/outcomes'
+    | '/report'
+    | '/setup'
+    | '/simulation'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agents' | '/report' | '/setup' | '/simulation'
-  id: '__root__' | '/' | '/agents' | '/report' | '/setup' | '/simulation'
+  to: '/' | '/agents' | '/outcomes' | '/report' | '/setup' | '/simulation'
+  id:
+    | '__root__'
+    | '/'
+    | '/agents'
+    | '/outcomes'
+    | '/report'
+    | '/setup'
+    | '/simulation'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
+  OutcomesRoute: typeof OutcomesRoute
   ReportRoute: typeof ReportRoute
   SetupRoute: typeof SetupRoute
   SimulationRoute: typeof SimulationRoute
@@ -102,6 +125,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outcomes': {
+      id: '/outcomes'
+      path: '/outcomes'
+      fullPath: '/outcomes'
+      preLoaderRoute: typeof OutcomesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agents': {
       id: '/agents'
       path: '/agents'
@@ -122,6 +152,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
+  OutcomesRoute: OutcomesRoute,
   ReportRoute: ReportRoute,
   SetupRoute: SetupRoute,
   SimulationRoute: SimulationRoute,
