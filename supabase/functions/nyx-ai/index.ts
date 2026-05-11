@@ -132,8 +132,32 @@ async function structured(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
+    const ok = await verifyAuth(req);
+    if (!ok) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const payload = await req.json();
     const task = payload.task as string;
+    if (typeof task !== "string" || !ALLOWED_TASKS.has(task)) {
+      return new Response(JSON.stringify({ error: "Invalid task" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Clamp common user-supplied prompt fields
+    if ("seed" in payload) payload.seed = clampStr(payload.seed, 4000);
+    if ("ontology" in payload) payload.ontology = clampJson(payload.ontology);
+    if ("rounds" in payload && typeof payload.rounds !== "number") payload.rounds = clampJson(payload.rounds);
+    if ("runtime" in payload) payload.runtime = clampJson(payload.runtime);
+    if ("prior" in payload) payload.prior = clampJson(payload.prior);
+    if ("history" in payload && Array.isArray(payload.history)) {
+      payload.history = payload.history.slice(-12).map((m: { role?: string; content?: unknown }) => ({
+        role: typeof m?.role === "string" ? m.role : "user",
+        content: clampStr(m?.content, 2000),
+      }));
+    }
+    if ("pastInsight" in payload) payload.pastInsight = clampStr(payload.pastInsight, 2000);
 
     if (task === "ontology") {
       const out = await structured(
