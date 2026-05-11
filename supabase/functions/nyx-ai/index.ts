@@ -40,9 +40,8 @@ async function verifyAuth(req: Request): Promise<boolean> {
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
   if (!url || !anon) return false;
-  // Accept the project anon/publishable key (enforces caller knows the project key)
-  if (token === anon) return true;
-  // Otherwise require a valid user JWT
+  // Require a valid user JWT — anon/publishable key is NOT accepted.
+  if (token === anon) return false;
   try {
     const supabase = createClient(url, anon, {
       global: { headers: { Authorization: `Bearer ${token}` } },
