@@ -2,11 +2,58 @@
 // Handles tasks: ontology, graph, round, report, chat
 // Uses Lovable AI Gateway with structured tool-calling for JSON.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const ALLOWED_TASKS = new Set([
+  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory",
+]);
+
+const MAX_STR = 4000;
+const MAX_JSON_CHARS = 20000;
+
+function clampStr(v: unknown, max = MAX_STR): string {
+  if (typeof v !== "string") return "";
+  return v.length > max ? v.slice(0, max) : v;
+}
+
+function clampJson(v: unknown, max = MAX_JSON_CHARS): unknown {
+  try {
+    const s = JSON.stringify(v ?? null);
+    if (s.length <= max) return v;
+    // Truncate by re-serializing as a safe stub
+    return { _truncated: true, preview: s.slice(0, 1000) };
+  } catch {
+    return null;
+  }
+}
+
+async function verifyAuth(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7).trim();
+  if (!token) return false;
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+  if (!url || !anon) return false;
+  // Accept the project anon/publishable key (enforces caller knows the project key)
+  if (token === anon) return true;
+  // Otherwise require a valid user JWT
+  try {
+    const supabase = createClient(url, anon, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(token);
+    return !error && !!data?.user;
+  } catch {
+    return false;
+  }
+}
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-2.5-flash";
@@ -88,8 +135,32 @@ async function structured(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
+    const ok = await verifyAuth(req);
+    if (!ok) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const payload = await req.json();
     const task = payload.task as string;
+    if (typeof task !== "string" || !ALLOWED_TASKS.has(task)) {
+      return new Response(JSON.stringify({ error: "Invalid task" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Clamp common user-supplied prompt fields
+    if ("seed" in payload) payload.seed = clampStr(payload.seed, 4000);
+    if ("ontology" in payload) payload.ontology = clampJson(payload.ontology);
+    if ("rounds" in payload && typeof payload.rounds !== "number") payload.rounds = clampJson(payload.rounds);
+    if ("runtime" in payload) payload.runtime = clampJson(payload.runtime);
+    if ("prior" in payload) payload.prior = clampJson(payload.prior);
+    if ("history" in payload && Array.isArray(payload.history)) {
+      payload.history = payload.history.slice(-12).map((m: { role?: string; content?: unknown }) => ({
+        role: typeof m?.role === "string" ? m.role : "user",
+        content: clampStr(m?.content, 2000),
+      }));
+    }
+    if ("pastInsight" in payload) payload.pastInsight = clampStr(payload.pastInsight, 2000);
 
     if (task === "ontology") {
       const out = await structured(
@@ -454,6 +525,10 @@ No prose outside JSON.`;
   } catch (e) {
     console.error("nyx-ai error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Surface only specific user-actionable errors; mask everything else.
+    const safe = /Rate limit|credits exhausted/i.test(msg)
+      ? msg
+      : "Internal server error. Please try again.";
+    return new Response(JSON.stringify({ error: safe }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
