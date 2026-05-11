@@ -522,6 +522,10 @@ No prose outside JSON.`;
   } catch (e) {
     console.error("nyx-ai error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Surface only specific user-actionable errors; mask everything else.
+    const safe = /Rate limit|credits exhausted/i.test(msg)
+      ? msg
+      : "Internal server error. Please try again.";
+    return new Response(JSON.stringify({ error: safe }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
