@@ -15,6 +15,7 @@ import {
   AgentStorylinePanel,
   VariableHeatmapPanel,
 } from "@/components/OutcomesExtraPanels";
+import { LeverageForceGraph } from "@/components/LeverageForceGraph";
 
 export const Route = createFileRoute("/outcomes")({
   head: () => ({
