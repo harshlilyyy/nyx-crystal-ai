@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Sparkles, Users, Activity, FileText, Compass } from "lucide-react";
+import { Home, Sparkles, Users, Activity, FileText, GitBranch } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getCurrent } from "@/lib/nyx-store";
