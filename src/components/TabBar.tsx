@@ -12,7 +12,7 @@ const baseTabs = [
   { to: "/report", label: "Report", icon: FileText },
 ] as const;
 
-const outcomesTab = { to: "/outcomes", label: "Outcomes", icon: Compass } as const;
+const outcomesTab = { to: "/outcomes", label: "Outcomes", icon: GitBranch } as const;
 
 export function TabBar() {
   const { pathname } = useLocation();
