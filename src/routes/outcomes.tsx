@@ -8,6 +8,13 @@ import type { AgentRuntime, Simulation } from "@/lib/nyx-types";
 import { Download, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  NarrativeTimelinePanel,
+  SentimentRidgePanel,
+  InfluenceSankeyPanel,
+  AgentStorylinePanel,
+  VariableHeatmapPanel,
+} from "@/components/OutcomesExtraPanels";
 
 export const Route = createFileRoute("/outcomes")({
   head: () => ({
@@ -301,6 +308,19 @@ function OutcomesPage() {
 
           {/* Panel 4 — Leverage Map */}
           <LeverageMap sim={sim} snap={snap} lens={lens} />
+        </div>
+      </div>
+
+      {/* ───── Extended Panels (5–9) ───── */}
+      <div className="space-y-3">
+        <NarrativeTimelinePanel sim={sim} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <SentimentRidgePanel sim={sim} />
+          <InfluenceSankeyPanel sim={sim} />
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <AgentStorylinePanel sim={sim} onSelect={(id) => setSelectedAgent(id)} />
+          <VariableHeatmapPanel sim={sim} />
         </div>
       </div>
     </PageShell>
