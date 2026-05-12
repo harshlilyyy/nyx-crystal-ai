@@ -15,6 +15,7 @@ import {
   AgentStorylinePanel,
   VariableHeatmapPanel,
 } from "@/components/OutcomesExtraPanels";
+import { LeverageForceGraph } from "@/components/LeverageForceGraph";
 
 export const Route = createFileRoute("/outcomes")({
   head: () => ({
@@ -193,6 +194,40 @@ function OutcomesPage() {
       CORE_VARS.forEach((k) => parts.push(`- ${k}: ${(selRt.core?.[k] ?? 0).toFixed(3)}`));
       if (selRt.emotionalAnchor) parts.push(`- emotional_anchor: ${selRt.emotionalAnchor.name} (intensity ${selRt.emotionalAnchor.intensity.toFixed(2)}, valence ${selRt.emotionalAnchor.valence.toFixed(2)})`);
     }
+    // Narrative timeline summary (cascade / recovery / mode shifts / anchors / assassin)
+    parts.push(`\n## Narrative Timeline`);
+    const prevMode: Record<string, string> = {};
+    const prevAnchor: Record<string, string | null> = {};
+    const prevCascade: Record<string, boolean> = {};
+    sim!.rounds.forEach((r, i) => {
+      Object.entries(r.stateSnapshot ?? {}).forEach(([id, rt]: any) => {
+        const m = (rt.lastIntent?.type ?? rt.modeV5 ?? rt.mode ?? "EXECUTE").toString().toUpperCase();
+        if (prevMode[id] && prevMode[id] !== m) parts.push(`- R${i + 1} **${agentMeta(id).name}** mode: ${prevMode[id]} → ${m}`);
+        prevMode[id] = m;
+        if (rt.cascade && !prevCascade[id]) parts.push(`- R${i + 1} ⚠ **${agentMeta(id).name}** cascade triggered`);
+        prevCascade[id] = !!rt.cascade;
+        const an = rt.emotionalAnchor?.name ?? null;
+        if (an && prevAnchor[id] !== an) parts.push(`- R${i + 1} ❖ **${agentMeta(id).name}** anchor: ${an} (i=${rt.emotionalAnchor.intensity.toFixed(2)}, v=${rt.emotionalAnchor.valence.toFixed(2)})`);
+        prevAnchor[id] = an;
+      });
+    });
+    if (assassin?.assumption) parts.push(`- ✶ BlackSwan: ${assassin.assumption} — ${assassin.whyFragile ?? ""}`);
+    // Variable importance highlights
+    parts.push(`\n## Variable Importance Highlights`);
+    const perVar: Record<string, { sum: number; n: number }> = {};
+    agentIds.forEach((id) => {
+      CORE_VARS.forEach((v) => {
+        const series: number[] = [];
+        sim!.rounds.forEach((r) => { const rt = r.stateSnapshot?.[id]; if (rt?.core) series.push((rt.core as any)[v] ?? 0); });
+        const m = series.reduce((s, x) => s + x, 0) / Math.max(1, series.length);
+        const va = series.reduce((s, x) => s + (x - m) ** 2, 0) / Math.max(1, series.length);
+        perVar[v] ||= { sum: 0, n: 0 }; perVar[v].sum += va; perVar[v].n += 1;
+      });
+    });
+    const ranked = Object.entries(perVar).map(([k, v]) => ({ k, avg: v.sum / Math.max(1, v.n) })).sort((a, b) => b.avg - a.avg);
+    parts.push(`- Most volatile: **${ranked[0]?.k ?? "—"}** (variance ${ranked[0]?.avg.toFixed(4) ?? "—"})`);
+    parts.push(`- Most stable: **${ranked[ranked.length - 1]?.k ?? "—"}** (variance ${ranked[ranked.length - 1]?.avg.toFixed(4) ?? "—"})`);
+    if (hasSensitivity) parts.push(`- Sensitivity-dominant: **${assassin!.targetVariable}**`);
     const blob = new Blob([parts.join("\n")], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -306,8 +341,13 @@ function OutcomesPage() {
             histories={histories}
           />
 
-          {/* Panel 4 — Leverage Map */}
-          <LeverageMap sim={sim} snap={snap} lens={lens} />
+          {/* Panel 4 — Leverage Map (react-force-graph-2d) */}
+          <LeverageForceGraph
+            sim={sim}
+            snap={snap}
+            lens={lens}
+            lensScale={(lensWeights[lens].reputation_mean + lensWeights[lens].inequality + lensWeights[lens].trust_proxy + lensWeights[lens].centralization) / 4}
+          />
         </div>
       </div>
 
@@ -411,7 +451,7 @@ function AgentDrillDown({ sim, agentId, histories }: { sim: Simulation; agentId:
           style={{ background: MODE_COLOR[m] ?? "#999", color: "#fff" }}
         >{m}</span>
       </header>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {CORE_VARS.map((k) => (
           <div key={k} className="rounded-lg bg-white/60 p-1.5">
             <div className="truncate text-[8px] font-mono text-muted-foreground">{k}</div>
@@ -454,110 +494,3 @@ function AgentDrillDown({ sim, agentId, histories }: { sim: Simulation; agentId:
   );
 }
 
-function LeverageMap({ sim, snap, lens }: { sim: Simulation; snap: Record<string, AgentRuntime>; lens: string }) {
-  const a = sim.report?.assassin;
-  const hasSens = !!a?.sensitivityScore;
-  const ids = sim.agentIds ?? Object.keys(snap);
-  const W = 280, H = 240, cx = W / 2, cy = H / 2, r = 90;
-  const positions = ids.map((id, i) => {
-    const ang = (i / Math.max(1, ids.length)) * Math.PI * 2;
-    return { id, x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r };
-  });
-  const posMap = Object.fromEntries(positions.map((p) => [p.id, p]));
-  const constraintColor = (c?: string) => {
-    if (c === "cap-limited") return "#C26B6B";
-    if (c === "network-limited") return "#D6913B";
-    if (c === "modulation-limited") return "#A77BC2";
-    return "#9d9282";
-  };
-  const baseSens = a?.sensitivityScore ?? 0.4;
-  const [hover, setHover] = useState<string | null>(null);
-
-  // edges from existing graph if present, else complete graph
-  const edges: { source: string; target: string; w: number; pos: boolean }[] = [];
-  if (sim.graph?.edges?.length) {
-    sim.graph.edges.forEach((e) => {
-      if (posMap[e.source] && posMap[e.target]) {
-        edges.push({ source: e.source, target: e.target, w: Math.abs(e.weight), pos: e.weight >= 0 });
-      }
-    });
-  } else {
-    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
-      edges.push({ source: ids[i], target: ids[j], w: 0.5, pos: true });
-    }
-  }
-
-  return (
-    <section className="glass rounded-2xl p-3">
-      <header className="mb-2 flex items-center justify-between">
-        <h2 className="font-display text-base font-semibold">Leverage Map</h2>
-        <span className="font-mono text-[9px] text-muted-foreground">{lens}</span>
-      </header>
-      {!hasSens && (
-        <p className="mb-2 text-[10px] text-muted-foreground">Run Sensitivity Analysis to see counterfactual branches.</p>
-      )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        {edges.map((e, i) => {
-          const aP = posMap[e.source], bP = posMap[e.target];
-          if (!aP || !bP) return null;
-          return (
-            <line
-              key={i}
-              x1={aP.x} y1={aP.y} x2={bP.x} y2={bP.y}
-              stroke={e.pos ? "rgba(110,160,120,0.45)" : "rgba(194,107,107,0.45)"}
-              strokeWidth={Math.max(0.6, e.w * 2)}
-            />
-          );
-        })}
-        {positions.map((p) => {
-          const rt = snap[p.id];
-          const cls = rt?.dampingDiagnostics?.reputationCapTriggered || rt?.dampingDiagnostics?.opportunityCapTriggered
-            ? "cap-limited"
-            : a?.constraintClassification;
-          const size = hasSens ? 6 + baseSens * 14 : 9;
-          const color = constraintColor(cls);
-          const meta = NYX_AGENTS.find((x) => x.id === p.id);
-          return (
-            <g
-              key={p.id}
-              onMouseEnter={() => setHover(p.id)}
-              onMouseLeave={() => setHover(null)}
-              style={{ cursor: "pointer" }}
-            >
-              <circle cx={p.x} cy={p.y} r={size} fill={color} opacity={0.85} stroke="white" strokeWidth={1.5} />
-              <text x={p.x} y={p.y + size + 9} textAnchor="middle" fontSize={8} fill="#5a4a44" fontFamily="Inter">
-                {meta?.name ?? p.id}
-              </text>
-              {hover === p.id && (
-                <g>
-                  <rect x={p.x + size + 4} y={p.y - 18} width={120} height={34} rx={4} fill="#1E1E1E" opacity={0.92} />
-                  <text x={p.x + size + 10} y={p.y - 6} fontSize={8} fill="#FDFBF7" fontFamily="Inter">
-                    {meta?.name ?? p.id}
-                  </text>
-                  <text x={p.x + size + 10} y={p.y + 6} fontSize={7} fill="#C8A97E" fontFamily="Courier Prime">
-                    S={hasSens ? baseSens.toFixed(2) : "—"} · {cls ?? "unclassified"}
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      <div className="mt-1 flex flex-wrap gap-2 text-[8px] text-muted-foreground">
-        <Legend color="#C26B6B" label="cap" />
-        <Legend color="#D6913B" label="network" />
-        <Legend color="#A77BC2" label="modulation" />
-        <Legend color="#9d9282" label="unclassified" />
-      </div>
-    </section>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} />
-      {label}
-    </span>
-  );
-}

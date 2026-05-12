@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Sparkles, Users, Activity, FileText, Compass } from "lucide-react";
+import { Home, Sparkles, Users, Activity, FileText, GitBranch } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getCurrent } from "@/lib/nyx-store";
@@ -12,7 +12,7 @@ const baseTabs = [
   { to: "/report", label: "Report", icon: FileText },
 ] as const;
 
-const outcomesTab = { to: "/outcomes", label: "Outcomes", icon: Compass } as const;
+const outcomesTab = { to: "/outcomes", label: "Outcomes", icon: GitBranch } as const;
 
 export function TabBar() {
   const { pathname } = useLocation();
