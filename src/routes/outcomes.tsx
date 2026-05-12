@@ -193,6 +193,40 @@ function OutcomesPage() {
       CORE_VARS.forEach((k) => parts.push(`- ${k}: ${(selRt.core?.[k] ?? 0).toFixed(3)}`));
       if (selRt.emotionalAnchor) parts.push(`- emotional_anchor: ${selRt.emotionalAnchor.name} (intensity ${selRt.emotionalAnchor.intensity.toFixed(2)}, valence ${selRt.emotionalAnchor.valence.toFixed(2)})`);
     }
+    // Narrative timeline summary (cascade / recovery / mode shifts / anchors / assassin)
+    parts.push(`\n## Narrative Timeline`);
+    const prevMode: Record<string, string> = {};
+    const prevAnchor: Record<string, string | null> = {};
+    const prevCascade: Record<string, boolean> = {};
+    sim!.rounds.forEach((r, i) => {
+      Object.entries(r.stateSnapshot ?? {}).forEach(([id, rt]: any) => {
+        const m = (rt.lastIntent?.type ?? rt.modeV5 ?? rt.mode ?? "EXECUTE").toString().toUpperCase();
+        if (prevMode[id] && prevMode[id] !== m) parts.push(`- R${i + 1} **${agentMeta(id).name}** mode: ${prevMode[id]} → ${m}`);
+        prevMode[id] = m;
+        if (rt.cascade && !prevCascade[id]) parts.push(`- R${i + 1} ⚠ **${agentMeta(id).name}** cascade triggered`);
+        prevCascade[id] = !!rt.cascade;
+        const an = rt.emotionalAnchor?.name ?? null;
+        if (an && prevAnchor[id] !== an) parts.push(`- R${i + 1} ❖ **${agentMeta(id).name}** anchor: ${an} (i=${rt.emotionalAnchor.intensity.toFixed(2)}, v=${rt.emotionalAnchor.valence.toFixed(2)})`);
+        prevAnchor[id] = an;
+      });
+    });
+    if (assassin?.assumption) parts.push(`- ✶ BlackSwan: ${assassin.assumption} — ${assassin.whyFragile ?? ""}`);
+    // Variable importance highlights
+    parts.push(`\n## Variable Importance Highlights`);
+    const perVar: Record<string, { sum: number; n: number }> = {};
+    agentIds.forEach((id) => {
+      CORE_VARS.forEach((v) => {
+        const series: number[] = [];
+        sim!.rounds.forEach((r) => { const rt = r.stateSnapshot?.[id]; if (rt?.core) series.push((rt.core as any)[v] ?? 0); });
+        const m = series.reduce((s, x) => s + x, 0) / Math.max(1, series.length);
+        const va = series.reduce((s, x) => s + (x - m) ** 2, 0) / Math.max(1, series.length);
+        perVar[v] ||= { sum: 0, n: 0 }; perVar[v].sum += va; perVar[v].n += 1;
+      });
+    });
+    const ranked = Object.entries(perVar).map(([k, v]) => ({ k, avg: v.sum / Math.max(1, v.n) })).sort((a, b) => b.avg - a.avg);
+    parts.push(`- Most volatile: **${ranked[0]?.k ?? "—"}** (variance ${ranked[0]?.avg.toFixed(4) ?? "—"})`);
+    parts.push(`- Most stable: **${ranked[ranked.length - 1]?.k ?? "—"}** (variance ${ranked[ranked.length - 1]?.avg.toFixed(4) ?? "—"})`);
+    if (hasSensitivity) parts.push(`- Sensitivity-dominant: **${assassin!.targetVariable}**`);
     const blob = new Blob([parts.join("\n")], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
