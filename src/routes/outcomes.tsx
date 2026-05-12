@@ -451,7 +451,7 @@ function AgentDrillDown({ sim, agentId, histories }: { sim: Simulation; agentId:
           style={{ background: MODE_COLOR[m] ?? "#999", color: "#fff" }}
         >{m}</span>
       </header>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {CORE_VARS.map((k) => (
           <div key={k} className="rounded-lg bg-white/60 p-1.5">
             <div className="truncate text-[8px] font-mono text-muted-foreground">{k}</div>
