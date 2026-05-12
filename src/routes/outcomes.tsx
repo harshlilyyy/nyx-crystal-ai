@@ -8,6 +8,13 @@ import type { AgentRuntime, Simulation } from "@/lib/nyx-types";
 import { Download, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  NarrativeTimelinePanel,
+  SentimentRidgePanel,
+  InfluenceSankeyPanel,
+  AgentStorylinePanel,
+  VariableHeatmapPanel,
+} from "@/components/OutcomesExtraPanels";
 
 export const Route = createFileRoute("/outcomes")({
   head: () => ({
