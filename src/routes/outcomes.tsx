@@ -341,8 +341,13 @@ function OutcomesPage() {
             histories={histories}
           />
 
-          {/* Panel 4 — Leverage Map */}
-          <LeverageMap sim={sim} snap={snap} lens={lens} />
+          {/* Panel 4 — Leverage Map (react-force-graph-2d) */}
+          <LeverageForceGraph
+            sim={sim}
+            snap={snap}
+            lens={lens}
+            lensScale={(lensWeights[lens].reputation_mean + lensWeights[lens].inequality + lensWeights[lens].trust_proxy + lensWeights[lens].centralization) / 4}
+          />
         </div>
       </div>
 
