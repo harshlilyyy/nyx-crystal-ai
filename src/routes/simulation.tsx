@@ -525,7 +525,8 @@ function SimulationPage() {
         <KernelVaultArchitectureCards
           v8Active={!!sim.v8Flags?.oasis}
           oasisEndpoint={sim.v8Flags?.oasisEndpoint}
-        />)
+        />
+      )}
 
       {/* Polarization Benchmark — Prophet (Sci. Reports 2025) calibration */}
       {sim?.advanced && <PolarizationBenchmark />}
