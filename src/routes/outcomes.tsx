@@ -184,24 +184,7 @@ function OutcomesPage() {
 
   const selRt = selectedAgent ? snap[selectedAgent] : null;
 
-  // Build per-variable history for selected agent
-  const histories = useMemo(() => {
-    const map: Record<string, number[]> = {};
-    if (!selectedAgent) return map;
-    CORE_VARS.forEach((k) => { map[k] = []; });
-    const contradictions: number[] = [];
-    const modeSeq: string[] = [];
-    sim.rounds.forEach((r) => {
-      const rt = r.stateSnapshot?.[selectedAgent];
-      if (!rt) return;
-      CORE_VARS.forEach((k) => { map[k].push(rt.core?.[k] ?? 0); });
-      contradictions.push(rt.contradictionScore ?? 0);
-      modeSeq.push(modeFor(rt));
-    });
-    (map as any).__contradictions = contradictions;
-    (map as any).__modes = modeSeq;
-    return map;
-  }, [sim, selectedAgent]);
+
 
   // self_worth last 8 rounds per agent (for chip mini sparklines)
   function selfWorthHistory(id: string): number[] {
