@@ -1123,7 +1123,15 @@ function overwriteCoreFromKernel(
   for (const id of agentIds) {
     const snap = round.agents[id];
     const rt = runtime[id];
-    if (!snap || !rt || !rt.core) continue;
+    if (!snap || !rt) continue;
+    if (!rt.core) {
+      rt.core = {
+        self_worth: 0.5, anxiety: 0.3, consistency: 0.5, momentum: 0.5,
+        reputation: 0.5, opportunity_access: 0.5, fragility_index: 0.3,
+        lock_in: 0.2, learning_rate: 0.5, energy: 0.8,
+        phenomenological_penetration: 0.6,
+      };
+    }
     rt.core.self_worth = snap.self_worth;
     rt.core.anxiety = snap.anxiety;
     rt.core.consistency = snap.consistency;
