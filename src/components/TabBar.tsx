@@ -21,7 +21,9 @@ export function TabBar() {
   useEffect(() => {
     const check = () => {
       const s = getCurrent();
-      setShowOutcomes(!!(s && s.advanced && s.status === "done"));
+      let debug = false;
+      try { debug = new URLSearchParams(window.location.search).get("debug_outcomes") === "true"; } catch { /* noop */ }
+      setShowOutcomes(debug || !!(s && s.advanced && s.status === "done"));
     };
     check();
     const onStorage = () => check();
