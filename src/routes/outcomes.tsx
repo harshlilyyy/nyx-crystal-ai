@@ -90,13 +90,36 @@ function OutcomesPage() {
   const [playing, setPlaying] = useState(false);
   const playRef = useRef<number | null>(null);
 
+  const debug = isDebugMode();
+  const [libError, setLibError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Probe optional viz dependency (react-force-graph-2d). Other extra panels
+    // are pure SVG/HTML, so no extra probes required.
+    let cancelled = false;
+    import("react-force-graph-2d")
+      .then(() => { /* ok */ })
+      .catch((e) => {
+        if (!cancelled) {
+          // eslint-disable-next-line no-console
+          console.error("[Outcomes] react-force-graph-2d failed to load:", e);
+          setLibError("react-force-graph-2d");
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const s = getCurrent();
-    if (!s || !s.advanced || s.status !== "done") { nav({ to: "/" }); return; }
+    if (!s || !s.advanced || s.status !== "done") {
+      if (debug) { setSim(s ?? undefined); return; }
+      nav({ to: "/" });
+      return;
+    }
     setSim(s);
     const ids = s.agentIds ?? Object.keys(s.runtime ?? {});
     setSelectedAgent(ids[0] ?? null);
-  }, [nav]);
+  }, [nav, debug]);
 
   useEffect(() => {
     if (!playing || !sim) return;
@@ -110,13 +133,34 @@ function OutcomesPage() {
     return () => { if (playRef.current) window.clearInterval(playRef.current); };
   }, [playing, sim]);
 
-  if (!sim) return <PageShell title="Outcomes" subtitle="Loading…"><div /></PageShell>;
+  if (!sim) {
+    if (debug) {
+      return (
+        <PageShell title="Outcomes" subtitle="Debug mode">
+          <div className="glass rounded-2xl p-3">
+            <h2 className="font-display text-base font-semibold text-primary">Debug mode: simulation data missing</h2>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              No completed advanced simulation found in storage. Panels are skipped to avoid crashes.
+            </p>
+            {libError && (
+              <p className="mt-2 rounded-xl bg-white/60 p-2 text-[10px] font-mono text-primary">
+                ⚠ {libError} not installed. Falling back to simple text view.
+              </p>
+            )}
+          </div>
+        </PageShell>
+      );
+    }
+    return <PageShell title="Outcomes" subtitle="Loading…"><div /></PageShell>;
+  }
 
-  const round = sim.rounds[roundIdx];
+  const round = sim.rounds?.[roundIdx];
   const snap = round?.stateSnapshot ?? sim.runtime ?? {};
   const agentIds = sim.agentIds ?? Object.keys(sim.runtime ?? {});
   const assassin = sim.report?.assassin;
   const hasSensitivity = !!(assassin && assassin.targetVariable && assassin.baselineOutcome && assassin.perturbedOutcome);
+  const hasRounds = Array.isArray(sim.rounds) && sim.rounds.length > 0;
+  const hasAgents = agentIds.length > 0;
 
   const selRt = selectedAgent ? snap[selectedAgent] : null;
 
