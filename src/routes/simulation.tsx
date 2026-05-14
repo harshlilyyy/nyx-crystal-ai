@@ -1123,7 +1123,15 @@ function overwriteCoreFromKernel(
   for (const id of agentIds) {
     const snap = round.agents[id];
     const rt = runtime[id];
-    if (!snap || !rt || !rt.core) continue;
+    if (!snap || !rt) continue;
+    if (!rt.core) {
+      rt.core = {
+        self_worth: 0.5, anxiety: 0.3, consistency: 0.5, momentum: 0.5,
+        reputation: 0.5, opportunity_access: 0.5, fragility_index: 0.3,
+        lock_in: 0.2, learning_rate: 0.5, energy: 0.8,
+        phenomenological_penetration: 0.6,
+      };
+    }
     rt.core.self_worth = snap.self_worth;
     rt.core.anxiety = snap.anxiety;
     rt.core.consistency = snap.consistency;
@@ -1138,6 +1146,19 @@ function overwriteCoreFromKernel(
     if (typeof snap.contradiction_score === "number") {
       rt.contradictionScore = snap.contradiction_score;
     }
+    // Fallback: clamp any NaN/undefined to 0.5 with a warning
+    for (const k of Object.keys(rt.core) as (keyof typeof rt.core)[]) {
+      const v = rt.core[k];
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        console.warn(`[Engine] non-finite ${String(k)} for ${id} round ${round.round} — defaulting to 0.5`);
+        rt.core[k] = 0.5;
+      }
+    }
+  }
+  // Debug: log the first agent's full state for this round
+  const firstId = agentIds[0];
+  if (firstId && runtime[firstId]?.core) {
+    console.log(`[Engine] Round ${round.round} Agent ${firstId}:`, { ...runtime[firstId].core });
   }
 }
 

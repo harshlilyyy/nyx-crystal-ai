@@ -114,6 +114,17 @@ function seedFromPersonality(id: string): Partial<AgentState> {
 
 export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
   const out: Record<string, AgentRuntime> = {};
+  let seed = 0x9e3779b1;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const j = (base: number, spread: number) => {
+    const v = base + (rand() * 2 - 1) * spread;
+    return Math.max(0, Math.min(1, v));
+  };
   for (const id of agentIds) {
     const state = { ...defaultState(), ...seedFromPersonality(id) };
     out[id] = {
@@ -132,6 +143,19 @@ export function initRuntime(agentIds: string[]): Record<string, AgentRuntime> {
       pathLocked: false,
       causalChain: [],
       microFailures: [],
+      core: {
+        self_worth: j(0.5, 0.1),
+        anxiety: j(0.25, 0.15),
+        consistency: j(0.5, 0.1),
+        momentum: 0.5,
+        reputation: 0.5,
+        opportunity_access: 0.5,
+        fragility_index: 0.1,
+        lock_in: 0.0,
+        learning_rate: 0.1,
+        energy: 0.8,
+        phenomenological_penetration: 0.6,
+      },
     };
   }
   return out;

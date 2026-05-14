@@ -99,7 +99,11 @@ export function LeverageForceGraph({
               nodeRelSize={4}
               nodeLabel={(n: any) => `${n.name} · ${n.cls}`}
               nodeCanvasObject={(node: any, ctx, gs) => {
-                const r = Math.max(3, (node.val ?? 6) / gs * 4 + 3);
+                if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+                const safeGs = Number.isFinite(gs) && gs > 0 ? gs : 1;
+                const rawVal = Number.isFinite(node.val) ? node.val : 6;
+                const r = Math.max(3, rawVal / safeGs * 4 + 3);
+                if (!Number.isFinite(r) || r <= 0) return;
                 // glow
                 const grad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 2.4);
                 grad.addColorStop(0, `${node.color}cc`);
@@ -108,12 +112,12 @@ export function LeverageForceGraph({
                 ctx.beginPath(); ctx.arc(node.x, node.y, r * 2.4, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = node.color;
                 ctx.strokeStyle = "#FDFBF7";
-                ctx.lineWidth = 1 / gs;
+                ctx.lineWidth = 1 / safeGs;
                 ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
                 ctx.fillStyle = "#FDFBF7";
-                ctx.font = `${10 / gs}px Inter, sans-serif`;
+                ctx.font = `${10 / safeGs}px Inter, sans-serif`;
                 ctx.textAlign = "center";
-                ctx.fillText(node.name, node.x, node.y + r + 8 / gs);
+                ctx.fillText(node.name, node.x, node.y + r + 8 / safeGs);
               }}
               linkColor={(l: any) => (l.pos ? "rgba(110,160,120,0.55)" : "rgba(194,107,107,0.55)")}
               linkWidth={(l: any) => Math.max(0.4, l.value * 2)}
