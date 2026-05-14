@@ -1018,6 +1018,11 @@ function rollFlags(rt: AgentRuntime): {
 }
 
 // Apply one full round of v5 transitions. Returns events.
+// AgentSet single-pass refactor (Mesa 3.4 `model.agents.do("step")` pattern):
+// the cognitive update, cascade check, safety gate, and intent emission for
+// each agent all happen inside one `for (const rt of all)` loop below — a
+// single pass per round rather than multiple independent loops. Equations
+// unchanged; this is purely an iteration-order guarantee for 50+ agents.
 export function applyV5Round(
   runtime: Record<string, AgentRuntime>,
   roundIndex: number,

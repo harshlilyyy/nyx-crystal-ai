@@ -57,6 +57,9 @@ export interface OutcomeVector {
   inequality: number;
   trust_proxy: number;
   centralization: number;
+  // Mesa 3.4 universal simulation time — single source of truth, deterministic
+  // per step. Non-persistent; populated in-memory after the kernel returns.
+  simulation_time?: number;
 }
 
 export interface SimulationResult {
@@ -178,7 +181,10 @@ __json.dumps(__r)
     };
     return {
       stateHistory: parsed.state_history,
-      outcomeVector: parsed.outcome_vector,
+      outcomeVector: {
+        ...parsed.outcome_vector,
+        simulation_time: parsed.state_history.length,
+      },
       seed: parsed.seed,
     };
   }
