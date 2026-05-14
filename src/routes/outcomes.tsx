@@ -16,6 +16,16 @@ import {
   VariableHeatmapPanel,
 } from "@/components/OutcomesExtraPanels";
 import { LeverageForceGraph } from "@/components/LeverageForceGraph";
+import { PanelErrorBoundary, PanelPlaceholder } from "@/components/PanelErrorBoundary";
+
+function isDebugMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get("debug_outcomes") === "true";
+  } catch {
+    return false;
+  }
+}
 
 export const Route = createFileRoute("/outcomes")({
   head: () => ({
