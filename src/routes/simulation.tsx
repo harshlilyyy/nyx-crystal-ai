@@ -518,6 +518,17 @@ function SimulationPage() {
         <V8Panel sim={sim} setSim={setSim} />
       )}
 
+      {/* Architectural validation cards (Advanced only) */}
+      {sim?.advanced && (
+        <KernelVaultArchitectureCards
+          v8Active={!!sim.v8Flags?.oasisIntegration}
+          oasisEndpoint={sim.v8Flags?.oasisEndpoint}
+        />
+      )}
+
+      {/* Polarization Benchmark — Prophet (Sci. Reports 2025) calibration */}
+      {sim?.advanced && <PolarizationBenchmark />}
+
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
