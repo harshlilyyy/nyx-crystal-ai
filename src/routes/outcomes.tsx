@@ -331,92 +331,138 @@ function OutcomesPage() {
         </div>
       </div>
 
+      {libError && (
+        <div className="glass rounded-2xl p-2 text-[10px] font-mono text-primary">
+          ⚠ {libError} not installed. Falling back to simple text view.
+        </div>
+      )}
+
       {/* 60/40 split: stacks on mobile */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
         {/* Left column 60% */}
         <div className="space-y-3 md:col-span-3">
           {/* Panel 1 — Timeline Explorer */}
-          <section className="glass rounded-2xl p-3">
-            <header className="mb-2 flex items-center justify-between">
-              <h2 className="font-display text-base font-semibold">Timeline · Round {roundIdx + 1}</h2>
-              <span className="font-mono text-[10px] text-muted-foreground">t = {roundIdx * 10}m</span>
-            </header>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {agentIds.map((id) => {
-                const rt = snap[id]; if (!rt) return null;
-                const m = modeFor(rt);
-                const color = MODE_COLOR[m] ?? "#999";
-                const inf = inflectionsFor(id);
-                const sw = selfWorthHistory(id);
-                const a = agentMeta(id);
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setSelectedAgent(id)}
-                    className={cn(
-                      "rounded-xl bg-white/60 p-2 text-left transition hover:bg-white/85",
-                      selectedAgent === id && "ring-2 ring-primary/40"
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-                      <span className="truncate text-[11px] font-semibold">{a.name}</span>
-                    </div>
-                    <div className="mt-1 flex items-end justify-between gap-1">
-                      <Sparkline values={sw} color={color} width={70} height={20} />
-                      <div className="flex gap-0.5">
-                        {inf.slice(-3).map((x, idx) => (
-                          <span
-                            key={idx}
-                            title={`${x.kind} @ R${x.round + 1}`}
-                            className="inline-block h-1.5 w-1.5 rotate-45"
-                            style={{ background: x.kind === "cascade" ? "#C26B6B" : x.kind === "anchor" ? "#A77BC2" : "#C8A97E" }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">{m}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          <PanelErrorBoundary name="Timeline Explorer">
+            {!hasAgents || !hasRounds ? (
+              <PanelPlaceholder name={`Timeline · Round ${roundIdx + 1}`} message="No data available" />
+            ) : (
+              <section className="glass rounded-2xl p-3">
+                <header className="mb-2 flex items-center justify-between">
+                  <h2 className="font-display text-base font-semibold">Timeline · Round {roundIdx + 1}</h2>
+                  <span className="font-mono text-[10px] text-muted-foreground">t = {roundIdx * 10}m</span>
+                </header>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {agentIds.map((id) => {
+                    const rt = snap[id]; if (!rt) return null;
+                    const m = modeFor(rt);
+                    const color = MODE_COLOR[m] ?? "#999";
+                    const inf = inflectionsFor(id);
+                    const sw = selfWorthHistory(id);
+                    const a = agentMeta(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => setSelectedAgent(id)}
+                        className={cn(
+                          "rounded-xl bg-white/60 p-2 text-left transition hover:bg-white/85",
+                          selectedAgent === id && "ring-2 ring-primary/40"
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+                          <span className="truncate text-[11px] font-semibold">{a.name}</span>
+                        </div>
+                        <div className="mt-1 flex items-end justify-between gap-1">
+                          <Sparkline values={sw} color={color} width={70} height={20} />
+                          <div className="flex gap-0.5">
+                            {inf.slice(-3).map((x, idx) => (
+                              <span
+                                key={idx}
+                                title={`${x.kind} @ R${x.round + 1}`}
+                                className="inline-block h-1.5 w-1.5 rotate-45"
+                                style={{ background: x.kind === "cascade" ? "#C26B6B" : x.kind === "anchor" ? "#A77BC2" : "#C8A97E" }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">{m}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+          </PanelErrorBoundary>
 
           {/* Panel 2 — Counterfactual Branches */}
-          <CounterfactualPanel sim={sim} lens={lens} weights={lensWeights[lens]} />
+          <PanelErrorBoundary name="Counterfactual">
+            {hasSensitivity ? (
+              <CounterfactualPanel sim={sim} lens={lens} weights={lensWeights[lens]} />
+            ) : (
+              <PanelPlaceholder name="Counterfactual" message="Run Sensitivity Analysis to see counterfactual branches." />
+            )}
+          </PanelErrorBoundary>
         </div>
 
         {/* Right column 40% */}
         <div className="space-y-3 md:col-span-2">
           {/* Panel 3 — Agent Drill-Down */}
-          <AgentDrillDown
-            sim={sim}
-            agentId={selectedAgent}
-            histories={histories}
-          />
+          <PanelErrorBoundary name="Agent Drill-Down">
+            {!selectedAgent || !hasRounds ? (
+              <PanelPlaceholder name="Agent Drill-Down" message="No data available" />
+            ) : (
+              <AgentDrillDown sim={sim} agentId={selectedAgent} histories={histories} />
+            )}
+          </PanelErrorBoundary>
 
           {/* Panel 4 — Leverage Map (react-force-graph-2d) */}
-          <LeverageForceGraph
-            sim={sim}
-            snap={snap}
-            lens={lens}
-            lensScale={(lensWeights[lens].reputation_mean + lensWeights[lens].inequality + lensWeights[lens].trust_proxy + lensWeights[lens].centralization) / 4}
-          />
+          <PanelErrorBoundary name="Leverage Map">
+            {!hasAgents ? (
+              <PanelPlaceholder name="Leverage Map" message="No data available" />
+            ) : libError === "react-force-graph-2d" ? (
+              <section className="glass rounded-2xl p-3">
+                <h2 className="font-display text-base font-semibold">Leverage Map</h2>
+                <ul className="mt-2 space-y-1 text-[11px]">
+                  {agentIds.map((id) => (
+                    <li key={id} className="font-mono text-muted-foreground">• {agentMeta(id).name}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : (
+              <LeverageForceGraph
+                sim={sim}
+                snap={snap}
+                lens={lens}
+                lensScale={(lensWeights[lens].reputation_mean + lensWeights[lens].inequality + lensWeights[lens].trust_proxy + lensWeights[lens].centralization) / 4}
+              />
+            )}
+          </PanelErrorBoundary>
         </div>
       </div>
 
       {/* ───── Extended Panels (5–9) ───── */}
       <div className="space-y-3">
-        <NarrativeTimelinePanel sim={sim} />
+        <PanelErrorBoundary name="Narrative Timeline">
+          {hasRounds ? <NarrativeTimelinePanel sim={sim} /> : <PanelPlaceholder name="Narrative Timeline" message="No data available" />}
+        </PanelErrorBoundary>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <SentimentRidgePanel sim={sim} />
-          <InfluenceSankeyPanel sim={sim} />
+          <PanelErrorBoundary name="Sentiment Ridge">
+            {hasRounds && hasAgents ? <SentimentRidgePanel sim={sim} /> : <PanelPlaceholder name="Sentiment Ridge" message="No data available" />}
+          </PanelErrorBoundary>
+          <PanelErrorBoundary name="Influence Sankey">
+            {hasRounds && hasAgents ? <InfluenceSankeyPanel sim={sim} /> : <PanelPlaceholder name="Influence Sankey" message="No data available" />}
+          </PanelErrorBoundary>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <AgentStorylinePanel sim={sim} onSelect={(id) => setSelectedAgent(id)} />
-          <VariableHeatmapPanel sim={sim} />
+          <PanelErrorBoundary name="Agent Storyline">
+            {hasRounds && hasAgents ? <AgentStorylinePanel sim={sim} onSelect={(id) => setSelectedAgent(id)} /> : <PanelPlaceholder name="Agent Storyline" message="No data available" />}
+          </PanelErrorBoundary>
+          <PanelErrorBoundary name="Variable Heatmap">
+            {hasRounds && hasAgents ? <VariableHeatmapPanel sim={sim} /> : <PanelPlaceholder name="Variable Heatmap" message="No data available" />}
+          </PanelErrorBoundary>
         </div>
       </div>
+
     </PageShell>
   );
 }
