@@ -47,6 +47,11 @@ import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from
 import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } from "@/lib/nyx-trajectory";
 import { KernelVaultArchitectureCards } from "@/components/KernelVaultArchitectureCards";
 import { PolarizationBenchmark } from "@/components/PolarizationBenchmark";
+import { ValidationSuite } from "@/components/ValidationSuite";
+import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
+import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
+import { EvidenceBadge } from "@/components/EvidenceBadge";
+import type { CoreState } from "@/lib/nyx-types";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -83,6 +88,7 @@ function SimulationPage() {
   const [kernelError, setKernelError] = useState<string | null>(null);
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
+  const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
