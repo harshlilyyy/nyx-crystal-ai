@@ -559,6 +559,16 @@ function SimulationPage() {
       {/* Polarization Benchmark — Prophet (Sci. Reports 2025) calibration */}
       {sim?.advanced && <PolarizationBenchmark />}
 
+      {/* Validation Suite — reproducibility & ablation (Advanced only) */}
+      {sim?.advanced && <ValidationSuite />}
+
+      {/* Multi-Trial Aggregation — BLF-style probabilistic outcomes (Advanced only) */}
+      {sim?.advanced && (
+        <MultiTrialAggregation
+          buildScenario={() => (sim ? buildKernelScenario(sim, swarmMode) : null)}
+        />
+      )}
+
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
