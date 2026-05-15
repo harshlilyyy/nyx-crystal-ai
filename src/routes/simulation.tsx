@@ -51,7 +51,7 @@ import { ValidationSuite } from "@/components/ValidationSuite";
 import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
 import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
-import type { EvidenceFlag as _EvFlag } from "@/lib/nyx-evidence";
+
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
