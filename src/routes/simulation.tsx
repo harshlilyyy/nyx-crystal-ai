@@ -1071,8 +1071,8 @@ function SimulationPage() {
 
       {/* Feeds */}
       <div className="grid grid-cols-2 gap-3">
-        <FeedColumn label="Twitter" items={twitter} />
-        <FeedColumn label="Reddit" items={reddit} />
+        <FeedColumn label="Twitter" items={twitter} flags={evidenceFlags} />
+        <FeedColumn label="Reddit" items={reddit} flags={evidenceFlags} />
       </div>
 
       {/* Mini graph */}
@@ -1324,7 +1324,7 @@ function KernelHeader({
   );
 }
 
-function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {
+function FeedColumn({ label, items, flags }: { label: string; items: FeedItem[]; flags?: Record<string, EvidenceFlag> }) {
   return (
     <div className="glass max-h-[420px] overflow-hidden rounded-[22px] p-3">
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
