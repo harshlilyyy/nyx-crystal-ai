@@ -275,7 +275,22 @@ function SimulationPage() {
       }
     }
 
-    const round: Round = {
+    // ---- EvidenceValidator: flag agent claims inconsistent with kernel state ----
+    if (sim.advanced && runtime && hasV5(runtime)) {
+      const newFlags: Record<string, EvidenceFlag> = {};
+      for (const f of combinedFeed) {
+        if (f.isRandomEvent) continue;
+        const rt = runtime[f.agentId];
+        if (!rt?.core) continue;
+        const flag = validateClaim(f.content, prevCore[f.agentId], rt.core);
+        if (!flag.grounded) newFlags[f.id] = flag;
+      }
+      if (Object.keys(newFlags).length) {
+        setEvidenceFlags((prev) => ({ ...prev, ...newFlags }));
+      }
+    }
+
+
       index: i,
       director: data.director,
       feed: combinedFeed,
