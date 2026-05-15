@@ -1339,7 +1339,10 @@ function FeedColumn({ label, items, flags }: { label: string; items: FeedItem[];
                   <span className="text-base">{agent?.avatar ?? "🤖"}</span>
                   <span className="truncate text-xs font-semibold">{it.agentName}</span>
                 </div>
-                <span className={cn("rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider", actionBadge(it.action))}>{it.action}</span>
+                <div className="flex items-center gap-1">
+                  {flags?.[it.id] && <EvidenceBadge flag={flags[it.id]} />}
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider", actionBadge(it.action))}>{it.action}</span>
+                </div>
               </div>
               <p className="mt-1.5 font-mono text-[11px] leading-snug">{it.content}</p>
               <div className="mt-1.5 flex gap-3 text-[10px] text-muted-foreground">
