@@ -164,6 +164,13 @@ function SimulationPage() {
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
+    // Capture pre-round CoreState snapshots for EvidenceValidator
+    const prevCore: Record<string, CoreState> = {};
+    if (sim.advanced && runtime) {
+      for (const [aid, rt] of Object.entries(runtime)) {
+        if (rt.core) prevCore[aid] = { ...rt.core };
+      }
+    }
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
