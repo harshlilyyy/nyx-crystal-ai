@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { initRuntime } from "@/lib/nyx-causal";
+import { HistoricalAnchorCard } from "@/components/HistoricalAnchorCard";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
@@ -226,6 +227,9 @@ function SetupPage() {
           </div>
         )}
       </div>
+
+      {/* Historical Anchor — Phase 1 placeholder; gated to Advanced */}
+      {sim?.advanced && <HistoricalAnchorCard />}
 
       {step === 1 && (
         <div className="glass rounded-[24px] p-5">

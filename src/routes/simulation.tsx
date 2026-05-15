@@ -47,6 +47,11 @@ import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from
 import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } from "@/lib/nyx-trajectory";
 import { KernelVaultArchitectureCards } from "@/components/KernelVaultArchitectureCards";
 import { PolarizationBenchmark } from "@/components/PolarizationBenchmark";
+import { ValidationSuite } from "@/components/ValidationSuite";
+import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
+import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
+import { EvidenceBadge } from "@/components/EvidenceBadge";
+
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -83,6 +88,7 @@ function SimulationPage() {
   const [kernelError, setKernelError] = useState<string | null>(null);
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
+  const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
@@ -158,6 +164,13 @@ function SimulationPage() {
     // ---- Advanced causal pre-round ----
     let runtime: Record<string, AgentRuntime> | undefined = sim.runtime;
     let preEvents: { agentId: string; kind: string; description: string }[] = [];
+    // Capture pre-round CoreState snapshots for EvidenceValidator
+    const prevCore: Record<string, CoreState> = {};
+    if (sim.advanced && runtime) {
+      for (const [aid, rt] of Object.entries(runtime)) {
+        if (rt.core) prevCore[aid] = { ...rt.core };
+      }
+    }
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
@@ -259,6 +272,21 @@ function SimulationPage() {
         processRoundOutcomes(runtime, combinedFeed, i);
         applyCompetitionRanking(runtime);
         stateSnapshot = JSON.parse(JSON.stringify(runtime));
+      }
+    }
+
+    // ---- EvidenceValidator: flag agent claims inconsistent with kernel state ----
+    if (sim.advanced && runtime && hasV5(runtime)) {
+      const newFlags: Record<string, EvidenceFlag> = {};
+      for (const f of combinedFeed) {
+        if (f.isRandomEvent) continue;
+        const rt = runtime[f.agentId];
+        if (!rt?.core) continue;
+        const flag = validateClaim(f.content, prevCore[f.agentId], rt.core);
+        if (!flag.grounded) newFlags[f.id] = flag;
+      }
+      if (Object.keys(newFlags).length) {
+        setEvidenceFlags((prev) => ({ ...prev, ...newFlags }));
       }
     }
 
@@ -530,6 +558,16 @@ function SimulationPage() {
 
       {/* Polarization Benchmark — Prophet (Sci. Reports 2025) calibration */}
       {sim?.advanced && <PolarizationBenchmark />}
+
+      {/* Validation Suite — reproducibility & ablation (Advanced only) */}
+      {sim?.advanced && <ValidationSuite />}
+
+      {/* Multi-Trial Aggregation — BLF-style probabilistic outcomes (Advanced only) */}
+      {sim?.advanced && (
+        <MultiTrialAggregation
+          buildScenario={() => (sim ? buildKernelScenario(sim, swarmMode) : null)}
+        />
+      )}
 
       {/* Sensitivity & Damping Diagnostics — Advanced only */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
@@ -1033,8 +1071,8 @@ function SimulationPage() {
 
       {/* Feeds */}
       <div className="grid grid-cols-2 gap-3">
-        <FeedColumn label="Twitter" items={twitter} />
-        <FeedColumn label="Reddit" items={reddit} />
+        <FeedColumn label="Twitter" items={twitter} flags={evidenceFlags} />
+        <FeedColumn label="Reddit" items={reddit} flags={evidenceFlags} />
       </div>
 
       {/* Mini graph */}
@@ -1286,7 +1324,7 @@ function KernelHeader({
   );
 }
 
-function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {
+function FeedColumn({ label, items, flags }: { label: string; items: FeedItem[]; flags?: Record<string, EvidenceFlag> }) {
   return (
     <div className="glass max-h-[420px] overflow-hidden rounded-[22px] p-3">
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
@@ -1301,7 +1339,10 @@ function FeedColumn({ label, items }: { label: string; items: FeedItem[] }) {
                   <span className="text-base">{agent?.avatar ?? "🤖"}</span>
                   <span className="truncate text-xs font-semibold">{it.agentName}</span>
                 </div>
-                <span className={cn("rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider", actionBadge(it.action))}>{it.action}</span>
+                <div className="flex items-center gap-1">
+                  {flags?.[it.id] && <EvidenceBadge flag={flags[it.id]} />}
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider", actionBadge(it.action))}>{it.action}</span>
+                </div>
               </div>
               <p className="mt-1.5 font-mono text-[11px] leading-snug">{it.content}</p>
               <div className="mt-1.5 flex gap-3 text-[10px] text-muted-foreground">
