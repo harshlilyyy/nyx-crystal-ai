@@ -290,7 +290,7 @@ function SimulationPage() {
       }
     }
 
-
+    const round: Round = {
       index: i,
       director: data.director,
       feed: combinedFeed,
