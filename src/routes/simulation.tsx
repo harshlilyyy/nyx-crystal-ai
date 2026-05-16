@@ -765,6 +765,11 @@ function SimulationPage() {
                     <div className="flex items-center gap-1.5 truncate">
                       <span>{a?.avatar}</span>
                       <span className="truncate text-xs font-semibold">{a?.name}</span>
+                      {(lockedRoundsRef.current[rt.agentId] ?? 0) >= 3 && (
+                        <span className="rounded-full bg-[oklch(0.93_0.06_25)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+                          🔒 Locked
+                        </span>
+                      )}
                     </div>
                     <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", modeColor)}>
                       {t.mode}
