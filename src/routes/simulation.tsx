@@ -723,6 +723,19 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* Dynamical primitives — attractor proximity, entropy, BA network (Advanced only) */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && entropyHistoryRef.current.length > 0 && (
+        <AttractorTelemetryCards
+          key={`dyn-${dynamicsTick}`}
+          entropyHistory={entropyHistoryRef.current}
+          proximityHistoryPerAgent={proximityHistoryRef.current}
+          lockedRounds={lockedRoundsRef.current}
+          cascadeThresholds={cascadeThresholdsRef.current}
+          influenceNetwork={influenceNetworkRef.current}
+          modesPerAgent={modesPerAgentRef.current}
+        />
+      )}
+
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
