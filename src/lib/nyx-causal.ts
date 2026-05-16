@@ -1027,7 +1027,7 @@ export function applyV5Round(
   runtime: Record<string, AgentRuntime>,
   roundIndex: number,
   totalRounds: number,
-  opts?: { episodicReplay?: boolean; bypassCaps?: boolean; bypassModulation?: boolean }
+  opts?: { episodicReplay?: boolean; bypassCaps?: boolean; bypassModulation?: boolean; cascadeThresholds?: Record<string, number> }
 ): { agentId: string; kind: string; description: string }[] {
   const all = Object.values(runtime);
   const events: { agentId: string; kind: string; description: string }[] = [];
@@ -1291,8 +1291,11 @@ export function applyV5Round(
     // Refined cascade trigger (v6.2): failure gated by perceived relevance.
     // Source of failure defaults to self → existence_value = 1.
     const effective_failure = flags.failure_flag * 1;
-    // Cascade detection (failure_streak >= 3 AND self_worth < 0.4) OR effective_failure spike
-    if ((failure_streak >= 3 && c.self_worth < 0.4) || effective_failure > 0.3) {
+    // Cascade detection: heterogeneous threshold (Granovetter) when provided,
+    // otherwise fixed 0.4. failure_streak >= 3 AND self_worth < threshold_i,
+    // OR effective_failure spike.
+    const cascadeThr = opts?.cascadeThresholds?.[rt.agentId] ?? 0.4;
+    if ((failure_streak >= 3 && c.self_worth < cascadeThr) || effective_failure > 0.3) {
       rt.cascade = true;
       events.push({ agentId: rt.agentId, kind: "cascade", description: `${name} entered a failure cascade.` });
     }

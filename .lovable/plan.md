@@ -1,46 +1,63 @@
 ## Goal
-Add a validation, probabilistic aggregation, and evidence-grounding pipeline to Nyx Advanced Simulation. All additions are gated behind the existing Advanced Simulation toggle, no new persistent state, no equation changes.
+Add four dynamical-systems primitives (attractor formalization, heterogeneous cascade thresholds, narrative entropy, scale-free network init) to Nyx Advanced Simulation. All gated by Advanced Simulation toggle. No new persistent state — values are derived per-round or treated as init-time parameters held in transient module-level maps keyed by simulation seed.
 
-## Scope
+## Files
 
-### Part 1 — Reproducibility & Validation (Telemetry Hub)
-New component `src/components/ValidationSuite.tsx` mounted in Telemetry Hub area of `src/routes/simulation.tsx` (only rendered when Advanced Simulation is ON). Three buttons inside one collapsible expander:
+### New: `src/lib/nyx-dynamics.ts`
+Pure deterministic helpers (no React, no persistence):
 
-1. **Reproducibility Check** — runs `applyV5Round` 3× with the same seed using `setSimulationSeed`, snapshots all 10 core variables per agent per round, asserts equality to 3 decimals, reports max deviation + ✅/❌ pill.
-2. **Polarization Benchmark** — extend the existing `PolarizationBenchmark.tsx` (already implemented) to also compute final-round `convergence_score` next to the trajectory chart. (No duplicate component.)
-3. **Ablation Test** — runs 10 simulations, each with one of the 10 core variables clamped to 0.5 (overwrite in `rt.core` before each `applyV5Round` call). Computes ΔS_damped vs. baseline using existing `successScore`/`v5Telemetry`. Renders horizontal Recharts bar chart ranking variables.
+1. **Attractor centroids** — hard-coded reference centroid table per verdict mode (STABLE_CONVERGENCE / POLARIZED_STALEMATE / FRAGMENTED_FAILURE / CENTRALIZED_CONTROL / ADAPTIVE_COMPROMISE / CASCADING_BREAKDOWN) for the 4-dim outcome vector + a 5-dim agent attractor centroid (self_worth, anxiety, momentum, consistency, reputation). Centroids derived from telemetry heuristics in `nyx-trajectory.ts`.
+2. `computeAttractorProximity(coreState, mode)` → cosine similarity in [0,1].
+3. `computeNarrativeEntropy(modes: string[])` → Shannon entropy over {AVOID, RECOVER, EXECUTE, OPTIMIZE} bucketed from `modeV5`/`mode`.
+4. `cascadeThresholdForAgent(seed, agentId)` — bounded normal (μ=0.40, σ=0.08, clamp [0.25, 0.55]) via deterministic mulberry32 keyed by `(seed XOR hash(agentId))`. Pure function, no caching needed.
+5. `buildScaleFreeNetwork(agentIds, seed, reputations)` — Barabási–Albert: 3 fully-connected seed nodes, then each new agent adds 2 outgoing edges sampled by reputation∝probability via mulberry32. Returns `Record<string, Record<string, number>>` weight map.
 
-### Part 2 — Probabilistic Aggregation (Deterministic Kernel section)
-New component `src/components/MultiTrialAggregation.tsx`, only mounted when `kernelEnabled` (deterministic kernel) is ON.
+### Edit: `src/lib/nyx-causal.ts`
+- In `applyV5Round` (cascade trigger location): add advanced-only branch that uses `failureStreak >= 3 && self_worth < cascadeThresholdForAgent(seed, agentId)` instead of fixed `< 0.4`. Gate by passing a new optional `cascadeThresholds?: Record<string, number>` parameter (default undefined → existing behavior). Round numeric updates to 3 decimals where the spec demands.
+- Export a small `attractorCentroidForMode` lookup re-exported from `nyx-dynamics.ts`.
 
-4. **Multi-Trial Mode checkbox** — when checked, "Run Kernel" runs 30 trials with seeds 1..30 via `kernel.runSimulation`. Aggregates `outcomeVector` components (mean, stddev, 90% CI via percentile).
-5. **Trajectory clustering** — K-means K=3 on the 30 outcome vectors (4-dim Euclidean). Label clusters by heuristic rules ("Stable Convergence" / "Polarized Stalemate" / "Fragmented Failure") based on `trust_proxy`/`inequality` thresholds. Pie chart (Recharts) + top-3 distinguishing variables per cluster (highest |centroid - global mean|).
-6. **Calibrated probability display** — apply Platt scaling (logistic σ(a·x + b)) on the cluster membership counts to derive Policy Success / Backlash / Implementation Collapse %. Static `a=4, b=-2` defaults documented as session-only. Show "⚠ Not historically calibrated" badge.
+### Edit: `src/routes/simulation.tsx`
+- Maintain transient session-only refs (NOT persisted to nyx-store):
+  - `attractorProximityRef`: `Record<agentId, number[]>` (last 10 rounds).
+  - `lockedRoundsRef`: `Record<agentId, number>` (consecutive rounds with proximity > 0.90).
+  - `entropyHistoryRef`: `number[]` (per round).
+  - `cascadeThresholdsRef`: `Record<agentId, number>` (computed once on first advanced round).
+  - `influenceNetworkRef`: `Record<string, Record<string, number>>` (Barabási–Albert init on first advanced round, used by Hebbian/decay logic that already exists).
+- After each `applyV5Round`, compute proximity per agent + entropy; push to refs.
+- Pass `cascadeThresholds` into `applyV5Round`.
+- Pass refs down to telemetry + agent drill-down sub-components.
 
-### Part 3 — Evidence Grounding
-7. **EvidenceValidator** — new helper `src/lib/nyx-evidence.ts` with `validateClaim(claim: string, prevCore, currCore): { grounded: boolean; reason?: string; variable?: string }`. Uses keyword matching ("trust rising/falling", "anxiety up/down", "polarization") against the actual delta sign in `core`. Called inside the existing per-agent debate generation loop in `src/routes/simulation.tsx` (only when V5 runtime exists). When ungrounded: render a "⚠ Ungrounded" badge on the debate card + append a grounding instruction to the next prompt for that agent. Never overrides output.
-8. **Historical Anchor card** — added to `src/routes/setup.tsx` Simulation Setup form. File input (CSV), dropdown for target metric (4 options). On submit, store `{filename, metric, csvPreview}` in `localStorage` under key `nyx_historical_anchor` (transient — not in nyx-store). Show "⚠ Historical calibration requires 1,000-seed parameter sweeps — coming in Phase 2."
+### New: `src/components/AttractorTelemetryCards.tsx`
+Mounted in Telemetry Hub area of `simulation.tsx` only when `sim.advanced`. Renders:
+- Narrative Diversity sparkline (Recharts LineChart) with red threshold line at y=0.8.
+- Strongest attractor basin readout (mode with highest mean proximity).
+- Cascade activation histogram (Recharts BarChart) — buckets of cascade thresholds.
+- Top network hubs (top-3 by weighted out-degree).
 
-## Files touched
-- `src/components/ValidationSuite.tsx` (new)
-- `src/components/MultiTrialAggregation.tsx` (new)
-- `src/components/EvidenceBadge.tsx` (new — small badge component)
-- `src/lib/nyx-evidence.ts` (new — validator helper)
-- `src/components/PolarizationBenchmark.tsx` (small addition: convergence_score readout)
-- `src/routes/simulation.tsx` (mount ValidationSuite, MultiTrialAggregation, wire EvidenceValidator into debate loop)
-- `src/routes/setup.tsx` (Historical Anchor card)
+### Edit: `src/routes/agents.tsx` (Agent Drill-Down area)
+Add per-agent panel (advanced only):
+- Attractor proximity sparkline (last 10 rounds).
+- Cascade threshold radial gauge (single SVG arc + numeric label).
+- 🔒 Locked badge when `lockedRoundsRef[agentId] >= 3`.
+- Local network degree readout.
+
+If agents.tsx doesn't have a drill-down, add inline cards below the agent list.
+
+## Determinism & Constraints
+- All RNG via `mulberry32(seed)` from `nyx-causal.ts`. No `Math.random()` in new code.
+- All vectors `Math.round(x * 1000) / 1000` after compute.
+- Fixed iteration order: `Object.keys(runtime).sort()` where ordering matters.
+- Refs are React `useRef` — recomputed per simulation run, never stored in nyx-store / Supabase / localStorage.
 
 ## Out of scope
-- Standard debate path (Advanced Simulation OFF)
-- Outcomes tab
-- Bidirectional bridge / cascade / episodic replay equations
-- Persistent state in nyx-store / Supabase
-- Real historical calibration (Phase 2)
+- Standard debate mode (advanced OFF unaffected).
+- Modifying perception filter, cascade/recovery equations beyond the threshold swap, regret matching, narrative binding, episodic replay, bridge, one-tick lag.
+- Persisting any new field on `Simulation` / `AgentRuntime` types.
+- Real historical calibration of attractor centroids (heuristic only this phase).
 
 ## Verification
-- Advanced Simulation OFF: no new UI appears.
-- Reproducibility Check returns ✅ with deviation 0.000 (deterministic engine).
-- Ablation chart shows non-zero bars.
-- Multi-Trial Mode produces 30 outcome vectors and pie chart sums to 100%.
-- Ungrounded claim flag appears when trust_proxy delta sign contradicts agent text.
+- Advanced OFF: no new UI, no behavior change.
+- Cascade now fires only on `failureStreak ≥ 3 AND self_worth < threshold_i`.
+- Same seed twice → identical proximity sparklines, identical entropy series, identical network topology.
+- Entropy sparkline visible in Telemetry Hub; threshold line at 0.8.
 - Build passes.

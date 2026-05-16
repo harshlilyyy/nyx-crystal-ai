@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -51,7 +51,15 @@ import { ValidationSuite } from "@/components/ValidationSuite";
 import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
 import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
-
+import { AttractorTelemetryCards } from "@/components/AttractorTelemetryCards";
+import {
+  cascadeThresholdsForAgents,
+  buildScaleFreeNetwork,
+  computeAttractorProximity,
+  computeNarrativeEntropy,
+  verdictModeFromV5,
+  type VerdictMode,
+} from "@/lib/nyx-dynamics";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -89,6 +97,14 @@ function SimulationPage() {
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
   const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
+  // === Dynamical primitives (transient, session-only, advanced-only) ===
+  const cascadeThresholdsRef = useRef<Record<string, number>>({});
+  const influenceNetworkRef = useRef<Record<string, Record<string, number>>>({});
+  const proximityHistoryRef = useRef<Record<string, number[]>>({});
+  const lockedRoundsRef = useRef<Record<string, number>>({});
+  const entropyHistoryRef = useRef<number[]>([]);
+  const modesPerAgentRef = useRef<Record<string, VerdictMode>>({});
+  const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
@@ -174,8 +190,39 @@ function SimulationPage() {
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
-        // v5 — seed-based core engine
-        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
+        // === Dynamical primitives init (advanced + v5, once per run) ===
+        const seedNum = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+        if (Object.keys(cascadeThresholdsRef.current).length === 0) {
+          cascadeThresholdsRef.current = cascadeThresholdsForAgents(seedNum, sim.agentIds);
+          const reps: Record<string, number> = {};
+          for (const id of sim.agentIds) reps[id] = runtime[id]?.core?.reputation ?? 0.5;
+          influenceNetworkRef.current = buildScaleFreeNetwork(sim.agentIds, seedNum, reps);
+        }
+        // v5 — seed-based core engine (with heterogeneous cascade thresholds)
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, {
+          episodicReplay: !!sim.episodicReplay,
+          cascadeThresholds: cascadeThresholdsRef.current,
+        });
+        // === Compute per-round attractor proximity + narrative entropy ===
+        const modes: (string | undefined)[] = [];
+        for (const id of [...sim.agentIds].sort()) {
+          const rt = runtime[id]; if (!rt?.core) continue;
+          modes.push(rt.modeV5);
+          const vmode = verdictModeFromV5(rt.modeV5);
+          modesPerAgentRef.current[id] = vmode;
+          const prox = computeAttractorProximity(rt.core, vmode);
+          const hist = proximityHistoryRef.current[id] ?? [];
+          hist.push(prox);
+          if (hist.length > 10) hist.shift();
+          proximityHistoryRef.current[id] = hist;
+          if (prox > 0.90) {
+            lockedRoundsRef.current[id] = (lockedRoundsRef.current[id] ?? 0) + 1;
+          } else {
+            lockedRoundsRef.current[id] = 0;
+          }
+        }
+        entropyHistoryRef.current = [...entropyHistoryRef.current, computeNarrativeEntropy(modes)];
+        setDynamicsTick((t) => t + 1);
         // === v8 Adaptive Cognition (gated, all default off) ===
         const v8 = sim.v8Flags;
         if (v8) {
@@ -676,6 +723,19 @@ function SimulationPage() {
         </div>
       )}
 
+      {/* Dynamical primitives — attractor proximity, entropy, BA network (Advanced only) */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && entropyHistoryRef.current.length > 0 && (
+        <AttractorTelemetryCards
+          key={`dyn-${dynamicsTick}`}
+          entropyHistory={entropyHistoryRef.current}
+          proximityHistoryPerAgent={proximityHistoryRef.current}
+          lockedRounds={lockedRoundsRef.current}
+          cascadeThresholds={cascadeThresholdsRef.current}
+          influenceNetwork={influenceNetworkRef.current}
+          modesPerAgent={modesPerAgentRef.current}
+        />
+      )}
+
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
         <div className="glass rounded-[22px] p-4">
@@ -705,6 +765,11 @@ function SimulationPage() {
                     <div className="flex items-center gap-1.5 truncate">
                       <span>{a?.avatar}</span>
                       <span className="truncate text-xs font-semibold">{a?.name}</span>
+                      {(lockedRoundsRef.current[rt.agentId] ?? 0) >= 3 && (
+                        <span className="rounded-full bg-[oklch(0.93_0.06_25)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+                          🔒 Locked
+                        </span>
+                      )}
                     </div>
                     <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", modeColor)}>
                       {t.mode}
