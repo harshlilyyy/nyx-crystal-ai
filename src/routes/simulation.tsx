@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -51,7 +51,15 @@ import { ValidationSuite } from "@/components/ValidationSuite";
 import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
 import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
-
+import { AttractorTelemetryCards } from "@/components/AttractorTelemetryCards";
+import {
+  cascadeThresholdsForAgents,
+  buildScaleFreeNetwork,
+  computeAttractorProximity,
+  computeNarrativeEntropy,
+  verdictModeFromV5,
+  type VerdictMode,
+} from "@/lib/nyx-dynamics";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
