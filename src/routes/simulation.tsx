@@ -190,8 +190,39 @@ function SimulationPage() {
     if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
-        // v5 — seed-based core engine
-        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, { episodicReplay: !!sim.episodicReplay });
+        // === Dynamical primitives init (advanced + v5, once per run) ===
+        const seedNum = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+        if (Object.keys(cascadeThresholdsRef.current).length === 0) {
+          cascadeThresholdsRef.current = cascadeThresholdsForAgents(seedNum, sim.agentIds);
+          const reps: Record<string, number> = {};
+          for (const id of sim.agentIds) reps[id] = runtime[id]?.core?.reputation ?? 0.5;
+          influenceNetworkRef.current = buildScaleFreeNetwork(sim.agentIds, seedNum, reps);
+        }
+        // v5 — seed-based core engine (with heterogeneous cascade thresholds)
+        preEvents = applyV5Round(runtime, i, TOTAL_ROUNDS, {
+          episodicReplay: !!sim.episodicReplay,
+          cascadeThresholds: cascadeThresholdsRef.current,
+        });
+        // === Compute per-round attractor proximity + narrative entropy ===
+        const modes: (string | undefined)[] = [];
+        for (const id of [...sim.agentIds].sort()) {
+          const rt = runtime[id]; if (!rt?.core) continue;
+          modes.push(rt.modeV5);
+          const vmode = verdictModeFromV5(rt.modeV5);
+          modesPerAgentRef.current[id] = vmode;
+          const prox = computeAttractorProximity(rt.core, vmode);
+          const hist = proximityHistoryRef.current[id] ?? [];
+          hist.push(prox);
+          if (hist.length > 10) hist.shift();
+          proximityHistoryRef.current[id] = hist;
+          if (prox > 0.90) {
+            lockedRoundsRef.current[id] = (lockedRoundsRef.current[id] ?? 0) + 1;
+          } else {
+            lockedRoundsRef.current[id] = 0;
+          }
+        }
+        entropyHistoryRef.current = [...entropyHistoryRef.current, computeNarrativeEntropy(modes)];
+        setDynamicsTick((t) => t + 1);
         // === v8 Adaptive Cognition (gated, all default off) ===
         const v8 = sim.v8Flags;
         if (v8) {
