@@ -97,6 +97,14 @@ function SimulationPage() {
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
   const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
+  // === Dynamical primitives (transient, session-only, advanced-only) ===
+  const cascadeThresholdsRef = useRef<Record<string, number>>({});
+  const influenceNetworkRef = useRef<Record<string, Record<string, number>>>({});
+  const proximityHistoryRef = useRef<Record<string, number[]>>({});
+  const lockedRoundsRef = useRef<Record<string, number>>({});
+  const entropyHistoryRef = useRef<number[]>([]);
+  const modesPerAgentRef = useRef<Record<string, VerdictMode>>({});
+  const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
   useEffect(() => {
