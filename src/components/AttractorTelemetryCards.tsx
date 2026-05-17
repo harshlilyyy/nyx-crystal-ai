@@ -15,6 +15,9 @@ export interface AttractorTelemetryProps {
   cascadeThresholds: Record<string, number>;
   influenceNetwork: Record<string, Record<string, number>>;
   modesPerAgent: Record<string, VerdictMode>;
+  predictionErrorPerAgent?: Record<string, number[]>;
+  memoryStrengthPerAgent?: Record<string, number[]>;
+  cascadePressurePerAgent?: Record<string, number>;
 }
 
 function agentName(id: string) {
