@@ -126,6 +126,22 @@ function SimulationPage() {
   const lockedRoundsRef = useRef<Record<string, number>>({});
   const entropyHistoryRef = useRef<number[]>([]);
   const modesPerAgentRef = useRef<Record<string, VerdictMode>>({});
+  // === Complex Systems Expansion Pack refs ===
+  const trustHistoryRef = useRef<number[]>([]);
+  const polHistoryRef = useRef<number[]>([]);
+  const trustVarHistoryRef = useRef<number[]>([]);
+  const polVarHistoryRef = useRef<number[]>([]);
+  const recoveryHistoryRef = useRef<number[]>([]);
+  const lastCascadeRoundRef = useRef<number | null>(null);
+  const predErrHistoryRef = useRef<Record<string, number[]>>({});
+  const predErrPersistRef = useRef<Record<string, number>>({});
+  const modePrevHistoryRef = useRef<Record<StrategyBucket, number>[]>([]);
+  const strategyProbsRef = useRef<Record<StrategyBucket, number>>(defaultStrategyProbs());
+  const memoryStrengthHistoryRef = useRef<Record<string, number[]>>({});
+  const cascadePressureRef = useRef<Record<string, number>>({});
+  const centralizationRef = useRef<{ value: number }>({ value: 0.5 });
+  const stabilityReportRef = useRef<StabilityReport | null>(null);
+  const complexDisabledRef = useRef<boolean>(false);
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
