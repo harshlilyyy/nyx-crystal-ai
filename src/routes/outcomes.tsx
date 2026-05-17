@@ -17,6 +17,9 @@ import {
 } from "@/components/OutcomesExtraPanels";
 import { LeverageForceGraph } from "@/components/LeverageForceGraph";
 import { PanelErrorBoundary, PanelPlaceholder } from "@/components/PanelErrorBoundary";
+import { DominantStrategiesCard } from "@/components/DominantStrategiesCard";
+import { ScenarioOutlookCard } from "@/components/ScenarioOutlookCard";
+import { bucketFromModeV5, STRATEGY_BUCKETS, type StrategyBucket } from "@/lib/nyx-complex";
 
 function isDebugMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -445,6 +448,24 @@ function OutcomesPage() {
 
       {/* ───── Extended Panels (5–9) ───── */}
       <div className="space-y-3">
+        {/* Complex Systems — Dominant Strategies + Scenario Outlook */}
+        {(() => {
+          const history: Record<StrategyBucket, number>[] = sim.rounds.map((r) => {
+            const out: Record<StrategyBucket, number> = { AVOID: 0, RECOVER: 0, EXECUTE: 0, OPTIMIZE: 0 };
+            const snap = r.stateSnapshot ?? {};
+            const ids = Object.keys(snap);
+            if (!ids.length) return out;
+            for (const id of ids) out[bucketFromModeV5(snap[id]?.modeV5)] += 1;
+            for (const k of STRATEGY_BUCKETS) out[k] = +(out[k] / ids.length).toFixed(3);
+            return out;
+          });
+          return (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DominantStrategiesCard history={history} />
+              <ScenarioOutlookCard sim={sim} />
+            </div>
+          );
+        })()}
         <PanelErrorBoundary name="Narrative Timeline">
           {hasRounds ? <NarrativeTimelinePanel sim={sim} /> : <PanelPlaceholder name="Narrative Timeline" message="No data available" />}
         </PanelErrorBoundary>

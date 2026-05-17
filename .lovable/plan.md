@@ -1,63 +1,59 @@
-## Goal
-Add four dynamical-systems primitives (attractor formalization, heterogeneous cascade thresholds, narrative entropy, scale-free network init) to Nyx Advanced Simulation. All gated by Advanced Simulation toggle. No new persistent state — values are derived per-round or treated as init-time parameters held in transient module-level maps keyed by simulation seed.
+# Complex Systems Expansion Pack
 
-## Files
+All features gated on `sim.advanced`. No persistent state added. Session-only refs/memos. Standard debate mode untouched.
 
-### New: `src/lib/nyx-dynamics.ts`
-Pure deterministic helpers (no React, no persistence):
+## New files
 
-1. **Attractor centroids** — hard-coded reference centroid table per verdict mode (STABLE_CONVERGENCE / POLARIZED_STALEMATE / FRAGMENTED_FAILURE / CENTRALIZED_CONTROL / ADAPTIVE_COMPROMISE / CASCADING_BREAKDOWN) for the 4-dim outcome vector + a 5-dim agent attractor centroid (self_worth, anxiety, momentum, consistency, reputation). Centroids derived from telemetry heuristics in `nyx-trajectory.ts`.
-2. `computeAttractorProximity(coreState, mode)` → cosine similarity in [0,1].
-3. `computeNarrativeEntropy(modes: string[])` → Shannon entropy over {AVOID, RECOVER, EXECUTE, OPTIMIZE} bucketed from `modeV5`/`mode`.
-4. `cascadeThresholdForAgent(seed, agentId)` — bounded normal (μ=0.40, σ=0.08, clamp [0.25, 0.55]) via deterministic mulberry32 keyed by `(seed XOR hash(agentId))`. Pure function, no caching needed.
-5. `buildScaleFreeNetwork(agentIds, seed, reputations)` — Barabási–Albert: 3 fully-connected seed nodes, then each new agent adds 2 outgoing edges sampled by reputation∝probability via mulberry32. Returns `Record<string, Record<string, number>>` weight map.
+**`src/lib/nyx-complex.ts`** — pure helpers (no React):
+- `computePredictionError(prev, observed, momentum)` → number
+- `applyActiveInferenceEffects(rt, predErr, history)` → mutates anxiety, learning_rate, lock_in
+- `rollingVariance(series, window=5)` → number
+- `detectEarlyWarnings(varHist, recoveryHist)` → `{ instability: boolean, slowing: boolean, stability: 0..100 }`
+- `updateReplicatorDynamics(probs, successByMode)` → new probs (clamped [0.05,0.7])
+- `computeModeSuccess(roundDelta, cascadeFlag)` → number
+- `applyCascadeContagion(runtime, W)` → mutates anxiety/trust_proxy on direct neighbors only
+- `applyHomeostasis(runtime, telemetry)` → stabilizing nudges
+- `decayMemory(buffer, eventKind?)` → strength updates
+- All deterministic, O(n) or O(n²) over agents.
 
-### Edit: `src/lib/nyx-causal.ts`
-- In `applyV5Round` (cascade trigger location): add advanced-only branch that uses `failureStreak >= 3 && self_worth < cascadeThresholdForAgent(seed, agentId)` instead of fixed `< 0.4`. Gate by passing a new optional `cascadeThresholds?: Record<string, number>` parameter (default undefined → existing behavior). Round numeric updates to 3 decimals where the spec demands.
-- Export a small `attractorCentroidForMode` lookup re-exported from `nyx-dynamics.ts`.
+**`src/components/SystemStabilityCard.tsx`** — stability meter (0–100), variance sparkline (Recharts), warning badges. Frosted glass, rose-gold accents on warnings.
 
-### Edit: `src/routes/simulation.tsx`
-- Maintain transient session-only refs (NOT persisted to nyx-store):
-  - `attractorProximityRef`: `Record<agentId, number[]>` (last 10 rounds).
-  - `lockedRoundsRef`: `Record<agentId, number>` (consecutive rounds with proximity > 0.90).
-  - `entropyHistoryRef`: `number[]` (per round).
-  - `cascadeThresholdsRef`: `Record<agentId, number>` (computed once on first advanced round).
-  - `influenceNetworkRef`: `Record<string, Record<string, number>>` (Barabási–Albert init on first advanced round, used by Hebbian/decay logic that already exists).
-- After each `applyV5Round`, compute proximity per agent + entropy; push to refs.
-- Pass `cascadeThresholds` into `applyV5Round`.
-- Pass refs down to telemetry + agent drill-down sub-components.
+**`src/components/DominantStrategiesCard.tsx`** — line chart of mode prevalence (AVOID red, RECOVER green, EXECUTE blue, OPTIMIZE purple) from history. For Outcomes tab.
 
-### New: `src/components/AttractorTelemetryCards.tsx`
-Mounted in Telemetry Hub area of `simulation.tsx` only when `sim.advanced`. Renders:
-- Narrative Diversity sparkline (Recharts LineChart) with red threshold line at y=0.8.
-- Strongest attractor basin readout (mode with highest mean proximity).
-- Cascade activation histogram (Recharts BarChart) — buckets of cascade thresholds.
-- Top network hubs (top-3 by weighted out-degree).
+**`src/components/ScenarioOutlookCard.tsx`** — Forecast Mode toggle + button. Runs 5 trials via `setTimeout` chunking (skip kernel/LLM, just `applyV5Round` loop). Shows bar chart with 90% CI for trust/inequality/polarization/centralization.
 
-### Edit: `src/routes/agents.tsx` (Agent Drill-Down area)
-Add per-agent panel (advanced only):
-- Attractor proximity sparkline (last 10 rounds).
-- Cascade threshold radial gauge (single SVG arc + numeric label).
-- 🔒 Locked badge when `lockedRoundsRef[agentId] >= 3`.
-- Local network degree readout.
+**`src/components/ResearchConceptsCard.tsx`** — concept list with tooltips (Active Inference/Friston, Cascade/Granovetter, etc.). Inter font, frosted glass.
 
-If agents.tsx doesn't have a drill-down, add inline cards below the agent list.
+**`src/components/CascadePressureGlow.tsx`** (or inline) — small glow indicator for agent chips.
 
-## Determinism & Constraints
-- All RNG via `mulberry32(seed)` from `nyx-causal.ts`. No `Math.random()` in new code.
-- All vectors `Math.round(x * 1000) / 1000` after compute.
-- Fixed iteration order: `Object.keys(runtime).sort()` where ordering matters.
-- Refs are React `useRef` — recomputed per simulation run, never stored in nyx-store / Supabase / localStorage.
+## Edits
+
+**`src/routes/simulation.tsx`**:
+- Add transient refs: `predictionErrorHistoryRef`, `varianceHistoryRef`, `recoveryTimeRef`, `modePrevalenceHistoryRef`, `modeProbsRef`, `memoryStrengthHistoryRef`, `cascadePressureRef`.
+- Inside `runRound` after `applyV5Round`:
+  1. Compute trust_proxy (mean rep across agents) + prediction_error per agent → apply effects.
+  2. Track variance/recovery → detect warnings.
+  3. Compute mode success → update replicator probs → store prevalence snapshot.
+  4. Apply cascade contagion using `influenceNetworkRef`.
+  5. Apply homeostasis when thresholds tripped.
+  6. Decay memory strength.
+- Render new cards (advanced + v5 only): `SystemStabilityCard`, `ResearchConceptsCard`. Mount `ScenarioOutlookCard` in Outcomes tab.
+- Add Forecast Mode toggle inside Controls (advanced only).
+
+**`src/routes/outcomes.tsx`** — mount `DominantStrategiesCard` and `ScenarioOutlookCard` (advanced only).
+
+**`src/components/AttractorTelemetryCards.tsx`** — add Prediction Error sparkline + Memory Intensity sparkline in Agent Drill-Down (reuses per-agent series from refs passed via new optional props).
+
+## Performance guards
+
+- Skip everything when `!sim.advanced || !hasV5`.
+- Cap history arrays at 50 entries.
+- Forecast trials use synchronous deterministic loop wrapped in `setTimeout(_, 0)` chunks, max 5 trials, no LLM calls.
+- If a try/catch around a feature throws, toast warning and disable for the session.
 
 ## Out of scope
-- Standard debate mode (advanced OFF unaffected).
-- Modifying perception filter, cascade/recovery equations beyond the threshold swap, regret matching, narrative binding, episodic replay, bridge, one-tick lag.
-- Persisting any new field on `Simulation` / `AgentRuntime` types.
-- Real historical calibration of attractor centroids (heuristic only this phase).
 
-## Verification
-- Advanced OFF: no new UI, no behavior change.
-- Cascade now fires only on `failureStreak ≥ 3 AND self_worth < threshold_i`.
-- Same seed twice → identical proximity sparklines, identical entropy series, identical network topology.
-- Entropy sparkline visible in Telemetry Hub; threshold line at 0.8.
-- Build passes.
+- No backend / Supabase changes.
+- No new types in `nyx-types.ts` (memory_strength stored in transient ref, not persisted).
+- No changes to standard debate path or kernel.
+- Cascade contagion is single-hop, non-recursive.
