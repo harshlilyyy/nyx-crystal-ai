@@ -34,6 +34,9 @@ export function AttractorTelemetryCards({
   cascadeThresholds,
   influenceNetwork,
   modesPerAgent,
+  predictionErrorPerAgent,
+  memoryStrengthPerAgent,
+  cascadePressurePerAgent,
 }: AttractorTelemetryProps) {
   // Strongest basin: mode with highest mean proximity across agents.
   const basinScores: Record<string, { sum: number; n: number }> = {};
