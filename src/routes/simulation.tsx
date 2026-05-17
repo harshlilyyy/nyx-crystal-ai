@@ -260,6 +260,89 @@ function SimulationPage() {
           }
         }
         entropyHistoryRef.current = [...entropyHistoryRef.current, computeNarrativeEntropy(modes)];
+        // === Complex Systems Expansion Pack — per-round computations ===
+        if (!complexDisabledRef.current) {
+          try {
+            const t0 = performance.now();
+            // Active Inference Lite
+            const prevTrust = trustHistoryRef.current[trustHistoryRef.current.length - 1] ?? 0.5;
+            const prevRepMean = meanReputation(runtime);
+            const observed = trustProxy(runtime);
+            for (const id of sim.agentIds) {
+              const rt = runtime[id]; if (!rt?.core) continue;
+              const persist = predErrPersistRef.current[id] ?? 0;
+              const res = applyActiveInference(rt, prevTrust, prevRepMean, observed, { pe: 0, persistRounds: persist });
+              predErrPersistRef.current[id] = res.persist;
+              const arr = predErrHistoryRef.current[id] ?? [];
+              arr.push(res.pe); if (arr.length > 50) arr.shift();
+              predErrHistoryRef.current[id] = arr;
+            }
+            // Early warnings
+            trustHistoryRef.current.push(observed);
+            polHistoryRef.current.push(polarizationScore(runtime));
+            if (trustHistoryRef.current.length > 50) trustHistoryRef.current.shift();
+            if (polHistoryRef.current.length > 50) polHistoryRef.current.shift();
+            trustVarHistoryRef.current.push(rollingVariance(trustHistoryRef.current, 5));
+            polVarHistoryRef.current.push(rollingVariance(polHistoryRef.current, 5));
+            if (trustVarHistoryRef.current.length > 50) trustVarHistoryRef.current.shift();
+            if (polVarHistoryRef.current.length > 50) polVarHistoryRef.current.shift();
+            // Recovery time tracking
+            const anyCascade = Object.values(runtime).some((r) => r.cascade);
+            if (anyCascade) lastCascadeRoundRef.current = i;
+            recoveryHistoryRef.current.push(lastCascadeRoundRef.current === null ? i + 1 : i - lastCascadeRoundRef.current);
+            if (recoveryHistoryRef.current.length > 50) recoveryHistoryRef.current.shift();
+            stabilityReportRef.current = detectEarlyWarnings(
+              trustVarHistoryRef.current, polVarHistoryRef.current, recoveryHistoryRef.current,
+            );
+            // Evolutionary strategy dynamics
+            const successByMode: Record<StrategyBucket, { sum: number; n: number }> = {
+              AVOID: { sum: 0, n: 0 }, RECOVER: { sum: 0, n: 0 },
+              EXECUTE: { sum: 0, n: 0 }, OPTIMIZE: { sum: 0, n: 0 },
+            };
+            for (const id of sim.agentIds) {
+              const rt = runtime[id]; if (!rt?.core) continue;
+              const success = computeModeSuccess(prevCore[id], rt.core, !!rt.cascade);
+              const bkt: StrategyBucket =
+                rt.modeV5 === "avoid" || rt.modeV5 === "fragile" || rt.modeV5 === "collapse" ? "AVOID" :
+                rt.modeV5 === "recovery" ? "RECOVER" :
+                rt.modeV5 === "growth" || rt.modeV5 === "spike" ? "OPTIMIZE" : "EXECUTE";
+              successByMode[bkt].sum += success; successByMode[bkt].n += 1;
+            }
+            const avgSuccess: Record<StrategyBucket, number> = {
+              AVOID: successByMode.AVOID.n ? successByMode.AVOID.sum / successByMode.AVOID.n : 0.5,
+              RECOVER: successByMode.RECOVER.n ? successByMode.RECOVER.sum / successByMode.RECOVER.n : 0.5,
+              EXECUTE: successByMode.EXECUTE.n ? successByMode.EXECUTE.sum / successByMode.EXECUTE.n : 0.5,
+              OPTIMIZE: successByMode.OPTIMIZE.n ? successByMode.OPTIMIZE.sum / successByMode.OPTIMIZE.n : 0.5,
+            };
+            strategyProbsRef.current = updateReplicator(strategyProbsRef.current, avgSuccess);
+            modePrevHistoryRef.current.push(modePrevalence(runtime));
+            if (modePrevHistoryRef.current.length > 50) modePrevHistoryRef.current.shift();
+            // Information cascade contagion (single-hop)
+            cascadePressureRef.current = applyCascadeContagion(runtime, influenceNetworkRef.current);
+            // Homeostatic stabilization
+            const repsArr = Object.values(runtime).map((r) => r.core?.reputation ?? 0.5);
+            const meanRep = repsArr.reduce((a, b) => a + b, 0) / Math.max(1, repsArr.length);
+            const ineq = Math.sqrt(repsArr.reduce((a, b) => a + (b - meanRep) ** 2, 0) / Math.max(1, repsArr.length));
+            applyHomeostasis(runtime, observed, ineq, centralizationRef.current);
+            // Memory decay & emotional boost
+            for (const id of sim.agentIds) {
+              const rt = runtime[id]; if (!rt?.episodicBuffer) continue;
+              decayMemoryBuffer(rt.episodicBuffer);
+              boostFreshMemory(rt.episodicBuffer, i);
+              const mh = memoryStrengthHistoryRef.current[id] ?? [];
+              mh.push(meanMemoryStrength(rt.episodicBuffer));
+              if (mh.length > 50) mh.shift();
+              memoryStrengthHistoryRef.current[id] = mh;
+            }
+            if (performance.now() - t0 > 250) {
+              complexDisabledRef.current = true;
+              toast.error("Complex systems pack auto-disabled (slow round).");
+            }
+          } catch (err) {
+            console.warn("Complex pack failed; disabling for session:", err);
+            complexDisabledRef.current = true;
+          }
+        }
         setDynamicsTick((t) => t + 1);
         // === v8 Adaptive Cognition (gated, all default off) ===
         const v8 = sim.v8Flags;
