@@ -854,8 +854,24 @@ function SimulationPage() {
           cascadeThresholds={cascadeThresholdsRef.current}
           influenceNetwork={influenceNetworkRef.current}
           modesPerAgent={modesPerAgentRef.current}
+          predictionErrorPerAgent={predErrHistoryRef.current}
+          memoryStrengthPerAgent={memoryStrengthHistoryRef.current}
+          cascadePressurePerAgent={cascadePressureRef.current}
         />
       )}
+
+      {/* Complex Systems — System Stability (Advanced only) */}
+      {sim?.advanced && sim.runtime && hasV5(sim.runtime) && stabilityReportRef.current && (
+        <SystemStabilityCard
+          key={`stab-${dynamicsTick}`}
+          report={stabilityReportRef.current}
+          trustVarHistory={trustVarHistoryRef.current}
+          polVarHistory={polVarHistoryRef.current}
+        />
+      )}
+
+      {/* Complex Systems — Research Concepts (Advanced only) */}
+      {sim?.advanced && <ResearchConceptsCard />}
 
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
       {sim?.advanced && sim.runtime && hasV5(sim.runtime) && (
