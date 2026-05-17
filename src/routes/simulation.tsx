@@ -60,6 +60,28 @@ import {
   verdictModeFromV5,
   type VerdictMode,
 } from "@/lib/nyx-dynamics";
+import {
+  meanReputation,
+  trustProxy,
+  polarizationScore,
+  applyActiveInference,
+  rollingVariance,
+  detectEarlyWarnings,
+  modePrevalence,
+  defaultStrategyProbs,
+  computeModeSuccess,
+  updateReplicator,
+  applyCascadeContagion,
+  applyHomeostasis,
+  decayMemoryBuffer,
+  boostFreshMemory,
+  meanMemoryStrength,
+  STRATEGY_BUCKETS,
+  type StrategyBucket,
+  type StabilityReport,
+} from "@/lib/nyx-complex";
+import { SystemStabilityCard } from "@/components/SystemStabilityCard";
+import { ResearchConceptsCard } from "@/components/ResearchConceptsCard";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
