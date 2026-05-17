@@ -17,6 +17,9 @@ import {
 } from "@/components/OutcomesExtraPanels";
 import { LeverageForceGraph } from "@/components/LeverageForceGraph";
 import { PanelErrorBoundary, PanelPlaceholder } from "@/components/PanelErrorBoundary";
+import { DominantStrategiesCard } from "@/components/DominantStrategiesCard";
+import { ScenarioOutlookCard } from "@/components/ScenarioOutlookCard";
+import { bucketFromModeV5, STRATEGY_BUCKETS, type StrategyBucket } from "@/lib/nyx-complex";
 
 function isDebugMode(): boolean {
   if (typeof window === "undefined") return false;
