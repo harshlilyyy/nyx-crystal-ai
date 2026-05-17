@@ -167,6 +167,9 @@ export function AttractorTelemetryCards({
             const locked = (lockedRounds[id] ?? 0) >= 3;
             const deg = weightedOutDegree(influenceNetwork, id);
             const data = series.map((v, i) => ({ r: i + 1, p: v }));
+            const peSeries = predictionErrorPerAgent?.[id] ?? [];
+            const memSeries = memoryStrengthPerAgent?.[id] ?? [];
+            const pressure = cascadePressurePerAgent?.[id] ?? 0;
             return (
               <div key={id} className="rounded-xl bg-secondary/30 p-2">
                 <div className="flex items-center justify-between gap-2">
@@ -178,14 +181,22 @@ export function AttractorTelemetryCards({
                         🔒 Locked
                       </span>
                     )}
+                    {pressure > 0.4 && (
+                      <span
+                        title="Cascade pressure from anxious/polarized neighbors"
+                        className="rounded-full bg-[oklch(0.92_0.07_55)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary"
+                      >
+                        ⚡ {pressure.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                   <div className="font-mono text-[9px] text-muted-foreground">
                     prox {last.toFixed(2)} · deg {deg.toFixed(2)}
                   </div>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  {/* Sparkline */}
-                  <div className="h-[36px] flex-1">
+                  {/* Proximity sparkline */}
+                  <div className="h-[36px] flex-1" title="Attractor proximity (cosine to mode centroid)">
                     {data.length > 1 && (
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -199,6 +210,38 @@ export function AttractorTelemetryCards({
                   {/* Radial gauge for cascade threshold */}
                   <CascadeGauge value={thr} />
                 </div>
+                {(peSeries.length > 1 || memSeries.length > 1) && (
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {peSeries.length > 1 && (
+                      <div
+                        className="h-[28px]"
+                        title="Prediction Error — agents minimize surprise between expected and observed world states."
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={peSeries.map((v, i) => ({ r: i + 1, v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                            <YAxis hide domain={[0, 1]} />
+                            <Line type="monotone" dataKey="v" stroke="oklch(0.55 0.16 25)" strokeWidth={1.3} dot={false} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <div className="text-[8px] uppercase tracking-wider text-muted-foreground">pred err</div>
+                      </div>
+                    )}
+                    {memSeries.length > 1 && (
+                      <div
+                        className="h-[28px]"
+                        title="Memory Intensity — mean episodic buffer strength (decays 3% per round; +0.2 boost on cascade/strong-valence events)."
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={memSeries.map((v, i) => ({ r: i + 1, v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                            <YAxis hide domain={[0, 1.2]} />
+                            <Line type="monotone" dataKey="v" stroke="oklch(0.55 0.12 80)" strokeWidth={1.3} dot={false} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <div className="text-[8px] uppercase tracking-wider text-muted-foreground">memory</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
