@@ -120,6 +120,7 @@ function SimulationPage() {
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
   const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
+  const benchmarkMode = useBenchmarkMode();
   // === Dynamical primitives (transient, session-only, advanced-only) ===
   const cascadeThresholdsRef = useRef<Record<string, number>>({});
   const influenceNetworkRef = useRef<Record<string, Record<string, number>>>({});
