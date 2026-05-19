@@ -905,6 +905,14 @@ function SimulationPage() {
       )}
 
       {/* Complex Systems — Research Concepts (Advanced only) */}
+      {sim?.advanced && observatoryHistoryRef.current.length > 0 && (
+        <SystemObservatoryCard
+          key={`obs-${dynamicsTick}`}
+          history={observatoryHistoryRef.current}
+          isFinal={roundIdx >= TOTAL_ROUNDS}
+        />
+      )}
+
       {sim?.advanced && <ResearchConceptsCard />}
 
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
