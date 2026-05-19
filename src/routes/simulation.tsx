@@ -48,6 +48,7 @@ import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } fr
 import { KernelVaultArchitectureCards } from "@/components/KernelVaultArchitectureCards";
 import { PolarizationBenchmark } from "@/components/PolarizationBenchmark";
 import { ValidationSuite } from "@/components/ValidationSuite";
+import { BenchmarkSuite, useBenchmarkMode } from "@/components/BenchmarkSuite";
 import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
 import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
