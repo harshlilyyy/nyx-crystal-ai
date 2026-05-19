@@ -48,6 +48,7 @@ import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } fr
 import { KernelVaultArchitectureCards } from "@/components/KernelVaultArchitectureCards";
 import { PolarizationBenchmark } from "@/components/PolarizationBenchmark";
 import { ValidationSuite } from "@/components/ValidationSuite";
+import { BenchmarkSuite, useBenchmarkMode } from "@/components/BenchmarkSuite";
 import { MultiTrialAggregation } from "@/components/MultiTrialAggregation";
 import { validateClaim, type EvidenceFlag } from "@/lib/nyx-evidence";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
@@ -119,6 +120,7 @@ function SimulationPage() {
   const [sensitivity, setSensitivity] = useState<import("@/lib/nyx-sensitivity").SensitivitySummary | null>(null);
   const [sensRunning, setSensRunning] = useState(false);
   const [evidenceFlags, setEvidenceFlags] = useState<Record<string, EvidenceFlag>>({});
+  const benchmarkMode = useBenchmarkMode();
   // === Dynamical primitives (transient, session-only, advanced-only) ===
   const cascadeThresholdsRef = useRef<Record<string, number>>({});
   const influenceNetworkRef = useRef<Record<string, Record<string, number>>>({});
@@ -729,6 +731,9 @@ function SimulationPage() {
 
       {/* Validation Suite — reproducibility & ablation (Advanced only) */}
       {sim?.advanced && <ValidationSuite />}
+
+      {/* Scientific Benchmark Mode — only when ?benchmark=true is in the URL */}
+      {sim?.advanced && benchmarkMode && <BenchmarkSuite />}
 
       {/* Multi-Trial Aggregation — BLF-style probabilistic outcomes (Advanced only) */}
       {sim?.advanced && (
