@@ -83,6 +83,8 @@ import {
 } from "@/lib/nyx-complex";
 import { SystemStabilityCard } from "@/components/SystemStabilityCard";
 import { ResearchConceptsCard } from "@/components/ResearchConceptsCard";
+import { SystemObservatoryCard } from "@/components/SystemObservatoryCard";
+import { buildObservatorySnapshot, type ObservatorySnapshot } from "@/lib/nyx-observatory";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
@@ -144,6 +146,7 @@ function SimulationPage() {
   const centralizationRef = useRef<{ value: number }>({ value: 0.5 });
   const stabilityReportRef = useRef<StabilityReport | null>(null);
   const complexDisabledRef = useRef<boolean>(false);
+  const observatoryHistoryRef = useRef<ObservatorySnapshot[]>([]);
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
@@ -335,6 +338,32 @@ function SimulationPage() {
               mh.push(meanMemoryStrength(rt.episodicBuffer));
               if (mh.length > 50) mh.shift();
               memoryStrengthHistoryRef.current[id] = mh;
+            }
+            // === System State Observatory snapshot (derived only) ===
+            try {
+              const entropyHist = entropyHistoryRef.current;
+              const lastEntropy = entropyHist[entropyHist.length - 1] ?? 0;
+              const cascadeTriggered = anyCascade;
+              const recentCascade = lastCascadeRoundRef.current !== null && i - lastCascadeRoundRef.current <= 1;
+              const snap = buildObservatorySnapshot({
+                round: i,
+                runtime,
+                prevCore,
+                trust: observed,
+                polarization: polHistoryRef.current[polHistoryRef.current.length - 1] ?? 0,
+                entropy: lastEntropy,
+                centralization: centralizationRef.current.value,
+                cascadePressure: cascadePressureRef.current,
+                modePrev: modePrevHistoryRef.current[modePrevHistoryRef.current.length - 1],
+                influenceNetwork: influenceNetworkRef.current,
+                stability: stabilityReportRef.current,
+                lockedRounds: lockedRoundsRef.current,
+                cascadeTriggered,
+                recentCascade,
+              });
+              observatoryHistoryRef.current = [...observatoryHistoryRef.current, snap].slice(-TOTAL_ROUNDS);
+            } catch (e) {
+              console.warn("Observatory snapshot failed:", e);
             }
             if (performance.now() - t0 > 250) {
               complexDisabledRef.current = true;
@@ -876,6 +905,14 @@ function SimulationPage() {
       )}
 
       {/* Complex Systems — Research Concepts (Advanced only) */}
+      {sim?.advanced && observatoryHistoryRef.current.length > 0 && (
+        <SystemObservatoryCard
+          key={`obs-${dynamicsTick}`}
+          history={observatoryHistoryRef.current}
+          isFinal={roundIdx >= TOTAL_ROUNDS}
+        />
+      )}
+
       {sim?.advanced && <ResearchConceptsCard />}
 
       {/* v5 Telemetry Hub — replaces v4 panels when seed-init is active */}
