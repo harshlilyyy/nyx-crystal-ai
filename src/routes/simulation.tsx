@@ -146,6 +146,7 @@ function SimulationPage() {
   const centralizationRef = useRef<{ value: number }>({ value: 0.5 });
   const stabilityReportRef = useRef<StabilityReport | null>(null);
   const complexDisabledRef = useRef<boolean>(false);
+  const observatoryHistoryRef = useRef<ObservatorySnapshot[]>([]);
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
 
