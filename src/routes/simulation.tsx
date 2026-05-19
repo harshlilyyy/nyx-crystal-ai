@@ -732,6 +732,9 @@ function SimulationPage() {
       {/* Validation Suite — reproducibility & ablation (Advanced only) */}
       {sim?.advanced && <ValidationSuite />}
 
+      {/* Scientific Benchmark Mode — only when ?benchmark=true is in the URL */}
+      {sim?.advanced && benchmarkMode && <BenchmarkSuite />}
+
       {/* Multi-Trial Aggregation — BLF-style probabilistic outcomes (Advanced only) */}
       {sim?.advanced && (
         <MultiTrialAggregation
