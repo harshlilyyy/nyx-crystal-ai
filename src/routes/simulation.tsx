@@ -339,6 +339,32 @@ function SimulationPage() {
               if (mh.length > 50) mh.shift();
               memoryStrengthHistoryRef.current[id] = mh;
             }
+            // === System State Observatory snapshot (derived only) ===
+            try {
+              const entropyHist = entropyHistoryRef.current;
+              const lastEntropy = entropyHist[entropyHist.length - 1] ?? 0;
+              const cascadeTriggered = anyCascade;
+              const recentCascade = lastCascadeRoundRef.current !== null && i - lastCascadeRoundRef.current <= 1;
+              const snap = buildObservatorySnapshot({
+                round: i,
+                runtime,
+                prevCore,
+                trust: observed,
+                polarization: polHistoryRef.current[polHistoryRef.current.length - 1] ?? 0,
+                entropy: lastEntropy,
+                centralization: centralizationRef.current.value,
+                cascadePressure: cascadePressureRef.current,
+                modePrev: modePrevHistoryRef.current[modePrevHistoryRef.current.length - 1],
+                influenceNetwork: influenceNetworkRef.current,
+                stability: stabilityReportRef.current,
+                lockedRounds: lockedRoundsRef.current,
+                cascadeTriggered,
+                recentCascade,
+              });
+              observatoryHistoryRef.current = [...observatoryHistoryRef.current, snap].slice(-TOTAL_ROUNDS);
+            } catch (e) {
+              console.warn("Observatory snapshot failed:", e);
+            }
             if (performance.now() - t0 > 250) {
               complexDisabledRef.current = true;
               toast.error("Complex systems pack auto-disabled (slow round).");
