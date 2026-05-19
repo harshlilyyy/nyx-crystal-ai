@@ -83,6 +83,8 @@ import {
 } from "@/lib/nyx-complex";
 import { SystemStabilityCard } from "@/components/SystemStabilityCard";
 import { ResearchConceptsCard } from "@/components/ResearchConceptsCard";
+import { SystemObservatoryCard } from "@/components/SystemObservatoryCard";
+import { buildObservatorySnapshot, type ObservatorySnapshot } from "@/lib/nyx-observatory";
 
 function hasV5(runtime?: Record<string, AgentRuntime>): boolean {
   if (!runtime) return false;
