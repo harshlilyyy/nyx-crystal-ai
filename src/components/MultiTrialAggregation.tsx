@@ -289,6 +289,9 @@ export function MultiTrialAggregation({ buildScenario }: Props) {
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Trajectory Clusters (K=3)
                   </div>
+                  <div className="rounded-xl bg-[oklch(0.96_0.02_60)] px-2.5 py-1.5 text-[11px] leading-snug text-[oklch(0.32_0.04_60)]">
+                    {buildClusterNarrative(clusters)}
+                  </div>
                   <div className="h-[180px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
