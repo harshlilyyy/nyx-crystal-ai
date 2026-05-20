@@ -67,22 +67,33 @@ class CognitiveAgent:
                          event_driven: float, success_flag: bool, failure_flag: bool,
                          mentor_flag: bool, social_feedback: float,
                          signal_boost: float):
-        ctx = sigmoid(self.self_worth - self.anxiety)
+        # Critical-fix sprint: linear emotional inertia, reduced peer conformity,
+        # persistence term on self_worth, lighter anxiety smoothing, undamped
+        # momentum, contrarian doubt and seeded jitter.
+        ctx = max(0.0, min(1.0, 0.5 + 0.5 * (self.self_worth - self.anxiety)))
         progress = self.consistency * (0.6 + 0.4 * self.momentum)
         self.reputation = clamp(self.reputation + 0.2 * progress + 0.1 * signal_boost)
         self.opportunity_access = clamp(
             self.opportunity_access + 0.25 * (1 if self.consistency * self.reputation > 0.4 else 0) + 0.15 * mentor_flag)
+        prev_sw = self.self_worth
+        prev_delta = getattr(self, "_last_sw_delta", 0.0)
         self.self_worth = clamp(
-            self.self_worth + 0.25 * progress - 0.3 * max(peer_gap, 0) + 0.15 * social_feedback - 0.2 * failure_flag)
+            self.self_worth + 0.35 * progress - 0.15 * max(peer_gap, 0)
+            + 0.2 * social_feedback - 0.25 * failure_flag + 0.1 * prev_delta)
         raw_anxiety_change = ctx * (0.4 * max(peer_gap, 0) + 0.3 * event_driven) - 0.2 * success_flag
-        self.anxiety = clamp(0.7 * self.anxiety + 0.3 * clamp(self.anxiety + raw_anxiety_change))
-        self.momentum = clamp(self.momentum + 0.2 * self.success_streak - 0.25 * self.failure_streak - 0.1 * self.momentum * self.momentum)
+        self.anxiety = clamp(0.4 * self.anxiety + 0.6 * clamp(self.anxiety + raw_anxiety_change))
+        self.momentum = clamp(self.momentum + 0.25 * self.success_streak - 0.3 * self.failure_streak)
         self.fragility_index = clamp(self.fragility_index + self.temp_modifiers["fragility_boost"])
         self.lock_in = clamp(self.lock_in + 0.1 * self.consistency)
         self.learning_rate = clamp(self.learning_rate + 0.1 * failure_flag - 0.05 * success_flag)
         self.energy = clamp(self.energy - 0.05 + 0.1 * success_flag)
         self.phenomenological_penetration = clamp(
             self.phenomenological_penetration + 0.1 * self.anxiety - 0.05 * self.consistency)
+        # Contrarian doubt + seeded jitter to break uniform locking / convergence.
+        if self.lock_in > 0.8 and rng() < 0.1:
+            self.consistency = clamp(self.consistency - 0.1)
+        self.self_worth = clamp(self.self_worth + (rng() - 0.5) * 0.04)
+        self._last_sw_delta = self.self_worth - prev_sw
         if success_flag:
             self.success_streak += 1; self.failure_streak = 0
         elif failure_flag:
