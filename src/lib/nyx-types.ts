@@ -196,6 +196,8 @@ export interface AgentRuntime {
   hardDissonanceUsed?: boolean;        // once-per-sim guard
   highContradictionStreak?: number;    // consecutive rounds with cs>0.8
   perceivedSelfByJ?: Record<string, number>; // i's belief about how j sees i (EMA)
+  // Critical-fix sprint: persistence term for self_worth update
+  lastSelfWorthDelta?: number;
 }
 
 export interface DampingDiagnostics {
