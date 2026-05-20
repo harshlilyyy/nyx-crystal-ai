@@ -1374,7 +1374,7 @@ export function applyV5Round(
       c.fragility_index > 0.75 && effective_self_worth < 0.3 ? "collapse" :
       rt.cascade ? "fragile" :
       c.anxiety > 0.7 && c.self_worth > 0.6 ? "spike" :
-      c.anxiety > 0.7 && c.self_worth < 0.4 ? "avoid" :
+      c.anxiety > 0.6 && c.self_worth < 0.4 ? "avoid" :
       effective_self_worth < 0.45 && c.momentum < 0.4 ? "recovery" :
       c.momentum > 0.65 && c.consistency > 0.55 ? "growth" : "steady";
 
