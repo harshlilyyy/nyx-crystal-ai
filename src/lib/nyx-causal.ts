@@ -1254,16 +1254,20 @@ export function applyV5Round(
       }
     }
 
+    // Critical-fix sprint #2/#7: persistence term + reduced peer-conformity.
+    const prevSelfWorthForDelta = c.self_worth;
+    const prevDelta = rt.lastSelfWorthDelta ?? 0;
     c.self_worth = clamp01(
-      c.self_worth + 0.25 * progress - 0.3 * Math.max(peer_gap, 0)
-      + 0.15 * flags.social_feedback - 0.2 * flags.failure_flag
+      c.self_worth + 0.35 * progress - 0.15 * Math.max(peer_gap, 0)
+      + 0.2 * flags.social_feedback - 0.25 * flags.failure_flag
       + 0.1 * Math.max(effectiveInfluence, 0)
+      + 0.1 * prevDelta
       + replayBoost
     );
 
-    // Anxiety: context-sensitive + emotional inertia (v6.3) + dissonance amplification (v6.6)
-    const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
-    const context_modifier = sigmoid(c.self_worth - c.anxiety);
+    // Anxiety: linear emotional-inertia modifier (wider, stronger reaction).
+    // context_modifier = clamp(0.5 + 0.5 * (self_worth - anxiety), 0, 1).
+    const context_modifier = clamp01(0.5 + 0.5 * (c.self_worth - c.anxiety));
     // v7 Soft active dissonance: amplify modulation when contradictionScore > 0.6
     const dissAmp = !opts?.bypassModulation && contradictionScore > 0.6
       ? (1 + 0.4 * contradictionScore) : 1;
@@ -1273,11 +1277,12 @@ export function applyV5Round(
       context_modifier * (0.4 * Math.max(effective_peer_gap, 0) + 0.3 * flags.event_driven)
       - 0.2 * flags.success_flag;
     const raw_next = clamp01(c.anxiety + raw_anxiety_change);
-    c.anxiety = clamp01(0.7 * c.anxiety + 0.3 * raw_next);
+    // Reduced smoothing: 0.4*current + 0.6*raw so shocks dissipate over multiple rounds.
+    c.anxiety = clamp01(0.4 * c.anxiety + 0.6 * raw_next);
 
-    // Momentum
+    // Momentum: remove quadratic damping so streaks can compound.
     c.momentum = clamp01(
-      c.momentum + 0.2 * success_streak - 0.25 * failure_streak - 0.1 * c.momentum * c.momentum
+      c.momentum + 0.25 * success_streak - 0.3 * failure_streak
     );
 
     // Fragility / energy / lock-in / learning_rate / consistency drift
@@ -1286,6 +1291,17 @@ export function applyV5Round(
     c.lock_in = clamp01(c.lock_in + 0.04 * c.consistency * (1 - peer_gap));
     c.learning_rate = clamp01(c.learning_rate + 0.02 * flags.success_flag - 0.02 * flags.failure_flag);
     c.consistency = clamp01(c.consistency + 0.03 * c.momentum - 0.05 * flags.failure_flag - 0.03 * (rt.cascade ? 1 : 0));
+
+    // Critical-fix sprint #5: contrarian doubt injection when lock_in is high.
+    if (c.lock_in > 0.8 && rngRandom() < 0.1) {
+      c.consistency = clamp01(c.consistency - 0.1);
+    }
+    // Critical-fix sprint #7: small seeded jitter on self_worth to prevent
+    // complete convergence (±0.02 around the updated value).
+    c.self_worth = clamp01(c.self_worth + (rngRandom() - 0.5) * 0.04);
+    // Record signed delta for next round's persistence term.
+    rt.lastSelfWorthDelta = c.self_worth - prevSelfWorthForDelta;
+
 
     // Refined cascade trigger (v6.2): failure gated by perceived relevance.
     // Source of failure defaults to self → existence_value = 1.
