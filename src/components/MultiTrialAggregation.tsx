@@ -76,9 +76,41 @@ function kmeans(points: Record<Component, number>[], K = 3, iters = 20) {
 }
 
 function labelCluster(centroid: Record<Component, number>): string {
-  if (centroid.trust_proxy > 0.55 && centroid.inequality < 0.45) return "Stable Convergence";
-  if (centroid.trust_proxy < 0.4 && centroid.inequality > 0.5) return "Fragmented Failure";
+  // Critical-fix sprint #4: tighter, mutually exclusive thresholds so the
+  // dominant label cannot drift into "Stable Convergence" while clusters
+  // actually show stalemate.
+  if (centroid.trust_proxy >= 0.6 && centroid.inequality < 0.35) return "Stable Convergence";
+  if (centroid.trust_proxy < 0.35 && centroid.inequality > 0.5) return "Fragmented Failure";
+  if (centroid.inequality > 0.35 || centroid.trust_proxy < 0.55) return "Polarized Stalemate";
   return "Polarized Stalemate";
+}
+
+// Cluster-derived narrative summary. Reads strictly from cluster names and
+// statistics — never injects optimistic language.
+function buildClusterNarrative(clusters: ClusterSummary[]): string {
+  const total = clusters.reduce((a, c) => a + c.count, 0) || 1;
+  const sorted = [...clusters].sort((a, b) => b.count - a.count);
+  const top = sorted[0];
+  const topShare = top.count / total;
+  const baseLabel = top.label.replace(/ \(\d+\)$/, "");
+  let head = "";
+  switch (baseLabel) {
+    case "Stable Convergence":
+      head = `Trajectories converge: ${Math.round(topShare * 100)}% of trials land in stable convergence.`;
+      break;
+    case "Polarized Stalemate":
+      head = `Entrenched polarization: ${Math.round(topShare * 100)}% of trials end in deep stalemate with no shared resolution.`;
+      break;
+    case "Fragmented Failure":
+      head = `Fragmented failure dominates: ${Math.round(topShare * 100)}% of trials show collapse of trust and widening divisions.`;
+      break;
+    default:
+      head = `Dominant pattern: ${baseLabel} (${Math.round(topShare * 100)}%).`;
+  }
+  if (topShare < 0.7) {
+    head += " No single dominant outcome pattern — high uncertainty.";
+  }
+  return head;
 }
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
