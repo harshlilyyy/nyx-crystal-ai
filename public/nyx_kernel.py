@@ -67,22 +67,33 @@ class CognitiveAgent:
                          event_driven: float, success_flag: bool, failure_flag: bool,
                          mentor_flag: bool, social_feedback: float,
                          signal_boost: float):
-        ctx = sigmoid(self.self_worth - self.anxiety)
+        # Critical-fix sprint: linear emotional inertia, reduced peer conformity,
+        # persistence term on self_worth, lighter anxiety smoothing, undamped
+        # momentum, contrarian doubt and seeded jitter.
+        ctx = max(0.0, min(1.0, 0.5 + 0.5 * (self.self_worth - self.anxiety)))
         progress = self.consistency * (0.6 + 0.4 * self.momentum)
         self.reputation = clamp(self.reputation + 0.2 * progress + 0.1 * signal_boost)
         self.opportunity_access = clamp(
             self.opportunity_access + 0.25 * (1 if self.consistency * self.reputation > 0.4 else 0) + 0.15 * mentor_flag)
+        prev_sw = self.self_worth
+        prev_delta = getattr(self, "_last_sw_delta", 0.0)
         self.self_worth = clamp(
-            self.self_worth + 0.25 * progress - 0.3 * max(peer_gap, 0) + 0.15 * social_feedback - 0.2 * failure_flag)
+            self.self_worth + 0.35 * progress - 0.15 * max(peer_gap, 0)
+            + 0.2 * social_feedback - 0.25 * failure_flag + 0.1 * prev_delta)
         raw_anxiety_change = ctx * (0.4 * max(peer_gap, 0) + 0.3 * event_driven) - 0.2 * success_flag
-        self.anxiety = clamp(0.7 * self.anxiety + 0.3 * clamp(self.anxiety + raw_anxiety_change))
-        self.momentum = clamp(self.momentum + 0.2 * self.success_streak - 0.25 * self.failure_streak - 0.1 * self.momentum * self.momentum)
+        self.anxiety = clamp(0.4 * self.anxiety + 0.6 * clamp(self.anxiety + raw_anxiety_change))
+        self.momentum = clamp(self.momentum + 0.25 * self.success_streak - 0.3 * self.failure_streak)
         self.fragility_index = clamp(self.fragility_index + self.temp_modifiers["fragility_boost"])
         self.lock_in = clamp(self.lock_in + 0.1 * self.consistency)
         self.learning_rate = clamp(self.learning_rate + 0.1 * failure_flag - 0.05 * success_flag)
         self.energy = clamp(self.energy - 0.05 + 0.1 * success_flag)
         self.phenomenological_penetration = clamp(
             self.phenomenological_penetration + 0.1 * self.anxiety - 0.05 * self.consistency)
+        # Contrarian doubt + seeded jitter to break uniform locking / convergence.
+        if self.lock_in > 0.8 and rng() < 0.1:
+            self.consistency = clamp(self.consistency - 0.1)
+        self.self_worth = clamp(self.self_worth + (rng() - 0.5) * 0.04)
+        self._last_sw_delta = self.self_worth - prev_sw
         if success_flag:
             self.success_streak += 1; self.failure_streak = 0
         elif failure_flag:
@@ -159,6 +170,11 @@ def run_simulation(scenario: dict, rounds: int = 3, seed: int = 42) -> dict:
                 if hasattr(agent, k): setattr(agent, k, v)
         if "emotional_anchor" in a:
             agent.emotional_anchor = a["emotional_anchor"]
+        # Critical-fix sprint #1: seeded ±0.08 noise so different seeds produce
+        # genuinely different trajectories and outcome vectors.
+        agent.self_worth = clamp(agent.self_worth + (rng() - 0.5) * 0.16)
+        agent.anxiety = clamp(agent.anxiety + (rng() - 0.5) * 0.16)
+        agent.consistency = clamp(agent.consistency + (rng() - 0.5) * 0.16)
         agents[a["name"]] = agent
 
     state_history = []
@@ -194,10 +210,20 @@ def run_simulation(scenario: dict, rounds: int = 3, seed: int = 42) -> dict:
         for a in agents.values():
             a.temp_modifiers = {"consistency_boost": 0.0, "fragility_boost": 0.0}
 
+    # Critical-fix sprint #3: amplify outcome-metric sensitivity.
+    n_agents = max(len(agents), 1)
+    rep_vals = [a.reputation for a in agents.values()]
+    opp_vals = [a.opportunity_access for a in agents.values()]
+    lock_vals = [a.lock_in for a in agents.values()]
+    rep_mean = sum(rep_vals) / n_agents
+    opp_mean = sum(opp_vals) / n_agents
+    opp_var = sum((o - opp_mean) ** 2 for o in opp_vals) / n_agents
+    lock_mean = sum(lock_vals) / n_agents
+    lock_var = sum((l - lock_mean) ** 2 for l in lock_vals) / n_agents
     outcome = {
-        "reputation_mean": sum(a.reputation for a in agents.values()) / max(len(agents), 1),
-        "inequality": sum((a.opportunity_access - 0.5)**2 for a in agents.values()) / max(len(agents), 1),
-        "trust_proxy": sum(a.lock_in for a in agents.values()) / max(len(agents), 1),
-        "centralization": sum(abs(W.get(src, {}).get(tgt, 0)) for src in agents for tgt in agents) / max(len(agents)**2, 1)
+        "reputation_mean": rep_mean,
+        "inequality": clamp(opp_var * 2.0),
+        "trust_proxy": clamp(lock_mean * (1.0 + lock_var)),
+        "centralization": sum(abs(W.get(src, {}).get(tgt, 0)) for src in agents for tgt in agents) / max(len(agents)**2, 1),
     }
     return {"state_history": state_history, "outcome_vector": outcome, "seed": seed}

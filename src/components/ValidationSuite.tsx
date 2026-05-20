@@ -81,7 +81,17 @@ function runOnce(seed: number, agentIds: string[], lockedVar?: CoreVar) {
 }
 
 function meanSuccess(runtime: ReturnType<typeof runOnce>): number {
-  const xs = Object.values(runtime).map((rt) => successScore(rt));
+  // Critical-fix sprint #6: derive the metric from the same `core` vector that
+  // ablation locks. Previously this used rt.state (v4 surface), so locking a
+  // CoreVar had zero observable effect and every row reported 0.000.
+  const xs = Object.values(runtime).map((rt) => {
+    const c = rt.core;
+    if (!c) return successScore(rt);
+    return (
+      c.reputation * 0.3 + c.self_worth * 0.25 + c.opportunity_access * 0.2 +
+      c.momentum * 0.15 + (1 - c.anxiety) * 0.1
+    );
+  });
   if (!xs.length) return 0;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
