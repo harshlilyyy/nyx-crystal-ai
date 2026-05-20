@@ -170,6 +170,11 @@ def run_simulation(scenario: dict, rounds: int = 3, seed: int = 42) -> dict:
                 if hasattr(agent, k): setattr(agent, k, v)
         if "emotional_anchor" in a:
             agent.emotional_anchor = a["emotional_anchor"]
+        # Critical-fix sprint #1: seeded ±0.08 noise so different seeds produce
+        # genuinely different trajectories and outcome vectors.
+        agent.self_worth = clamp(agent.self_worth + (rng() - 0.5) * 0.16)
+        agent.anxiety = clamp(agent.anxiety + (rng() - 0.5) * 0.16)
+        agent.consistency = clamp(agent.consistency + (rng() - 0.5) * 0.16)
         agents[a["name"]] = agent
 
     state_history = []
