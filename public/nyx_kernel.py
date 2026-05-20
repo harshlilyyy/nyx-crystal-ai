@@ -210,10 +210,20 @@ def run_simulation(scenario: dict, rounds: int = 3, seed: int = 42) -> dict:
         for a in agents.values():
             a.temp_modifiers = {"consistency_boost": 0.0, "fragility_boost": 0.0}
 
+    # Critical-fix sprint #3: amplify outcome-metric sensitivity.
+    n_agents = max(len(agents), 1)
+    rep_vals = [a.reputation for a in agents.values()]
+    opp_vals = [a.opportunity_access for a in agents.values()]
+    lock_vals = [a.lock_in for a in agents.values()]
+    rep_mean = sum(rep_vals) / n_agents
+    opp_mean = sum(opp_vals) / n_agents
+    opp_var = sum((o - opp_mean) ** 2 for o in opp_vals) / n_agents
+    lock_mean = sum(lock_vals) / n_agents
+    lock_var = sum((l - lock_mean) ** 2 for l in lock_vals) / n_agents
     outcome = {
-        "reputation_mean": sum(a.reputation for a in agents.values()) / max(len(agents), 1),
-        "inequality": sum((a.opportunity_access - 0.5)**2 for a in agents.values()) / max(len(agents), 1),
-        "trust_proxy": sum(a.lock_in for a in agents.values()) / max(len(agents), 1),
-        "centralization": sum(abs(W.get(src, {}).get(tgt, 0)) for src in agents for tgt in agents) / max(len(agents)**2, 1)
+        "reputation_mean": rep_mean,
+        "inequality": clamp(opp_var * 2.0),
+        "trust_proxy": clamp(lock_mean * (1.0 + lock_var)),
+        "centralization": sum(abs(W.get(src, {}).get(tgt, 0)) for src in agents for tgt in agents) / max(len(agents)**2, 1),
     }
     return {"state_history": state_history, "outcome_vector": outcome, "seed": seed}
