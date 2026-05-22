@@ -101,7 +101,7 @@ export const Route = createFileRoute("/simulation")({
   component: SimulationPage,
 });
 
-const TOTAL_ROUNDS = 4;
+const TOTAL_ROUNDS = 8;
 
 function SimulationPage() {
   const nav = useNavigate();
@@ -643,11 +643,28 @@ function SimulationPage() {
       {sim?.advanced && (
         <KernelHeader
           loading={kernel.loading}
-          active={useKernelPath && !kernelError}
+          active={useKernelPath && !kernelError && !!kernelOutcome}
           unavailable={!!(kernel.error || kernelError)}
           seed={sim.prngSeed ?? 42}
           outcome={kernelOutcome}
           history={kernelHistory}
+          onVerify={async () => {
+            if (!sim || !useKernelPath || !kernelOutcome) {
+              toast.error("Run a simulation first.");
+              return null;
+            }
+            try {
+              const scenario = buildKernelScenario(sim, swarmMode);
+              const seed = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+              const result = await kernel.runSimulation(scenario, TOTAL_ROUNDS, seed);
+              const a = JSON.stringify(kernelOutcome);
+              const b = JSON.stringify(result.outcomeVector);
+              return a === b;
+            } catch (e) {
+              toast.error("Reproducibility run failed: " + (e instanceof Error ? e.message : String(e)));
+              return null;
+            }
+          }}
         />
       )}
       <div className="glass rounded-[22px]">
@@ -1502,7 +1519,7 @@ function StateChip({ label, v }: { label: string; v: number }) {
 }
 
 function KernelHeader({
-  loading, active, unavailable, seed, outcome, history,
+  loading, active, unavailable, seed, outcome, history, onVerify,
 }: {
   loading: boolean;
   active: boolean;
@@ -1510,21 +1527,23 @@ function KernelHeader({
   seed: number;
   outcome: OutcomeVector | null;
   history: RoundState[] | null;
+  onVerify?: () => Promise<boolean | null>;
 }) {
   const [open, setOpen] = useState(false);
+  const [verifyState, setVerifyState] = useState<"idle" | "running" | "pass" | "fail">("idle");
   const trajectory = active && outcome && history ? computeTrajectoryMetrics(history, outcome) : null;
   const fmt = (n: number) => (n >= 0 ? `+${n.toFixed(3)}` : n.toFixed(3));
   return (
     <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
-      {loading && <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>}
+      {loading && <span className="text-muted-foreground">⏳ Loading Python engine…</span>}
       {active && (
         <span className="font-medium text-primary">
-          ▶ Deterministic Kernel Active (seed: {seed})
+          ✓ Deterministic Kernel · seed {seed}
         </span>
       )}
       {unavailable && (
         <span className="text-muted-foreground">
-          ⚠ Kernel unavailable — using emulated state
+          ⚠ Kernel not available — using fallback
         </span>
       )}
       {outcome && (
@@ -1560,6 +1579,32 @@ function KernelHeader({
               <span>converg: {trajectory.convergenceScore.toFixed(3)}</span>
               <span>instab: {trajectory.instabilityIndex.toFixed(3)}</span>
               <span>trend: {trajectory.dominantTrend}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {active && onVerify && (
+        <div className="mt-2 border-t border-white/20 pt-2">
+          <button
+            type="button"
+            disabled={verifyState === "running"}
+            onClick={async () => {
+              setVerifyState("running");
+              const ok = await onVerify();
+              setVerifyState(ok === null ? "idle" : ok ? "pass" : "fail");
+            }}
+            className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-primary disabled:opacity-50"
+          >
+            {verifyState === "running" ? "Verifying…" : "🔁 Verify Reproducibility"}
+          </button>
+          {verifyState === "pass" && (
+            <div className="mt-1.5 rounded-xl bg-[oklch(0.94_0.05_150)] px-2.5 py-1.5 text-[10px] font-medium text-[oklch(0.35_0.10_150)]">
+              ✅ Reproducibility Passed — identical outcome
+            </div>
+          )}
+          {verifyState === "fail" && (
+            <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.07_25)] px-2.5 py-1.5 text-[10px] font-medium text-[oklch(0.40_0.15_25)]">
+              ❌ Reproducibility Failed — outputs differ (hash mismatch)
             </div>
           )}
         </div>
