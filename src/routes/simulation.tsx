@@ -101,7 +101,7 @@ export const Route = createFileRoute("/simulation")({
   component: SimulationPage,
 });
 
-const TOTAL_ROUNDS = 4;
+const TOTAL_ROUNDS = 8;
 
 function SimulationPage() {
   const nav = useNavigate();
