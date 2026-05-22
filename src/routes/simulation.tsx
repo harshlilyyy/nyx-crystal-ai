@@ -1583,6 +1583,32 @@ function KernelHeader({
           )}
         </div>
       )}
+      {active && onVerify && (
+        <div className="mt-2 border-t border-white/20 pt-2">
+          <button
+            type="button"
+            disabled={verifyState === "running"}
+            onClick={async () => {
+              setVerifyState("running");
+              const ok = await onVerify();
+              setVerifyState(ok === null ? "idle" : ok ? "pass" : "fail");
+            }}
+            className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-primary disabled:opacity-50"
+          >
+            {verifyState === "running" ? "Verifying…" : "🔁 Verify Reproducibility"}
+          </button>
+          {verifyState === "pass" && (
+            <div className="mt-1.5 rounded-xl bg-[oklch(0.94_0.05_150)] px-2.5 py-1.5 text-[10px] font-medium text-[oklch(0.35_0.10_150)]">
+              ✅ Reproducibility Passed — identical outcome
+            </div>
+          )}
+          {verifyState === "fail" && (
+            <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.07_25)] px-2.5 py-1.5 text-[10px] font-medium text-[oklch(0.40_0.15_25)]">
+              ❌ Reproducibility Failed — outputs differ (hash mismatch)
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
