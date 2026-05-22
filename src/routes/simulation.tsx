@@ -643,11 +643,28 @@ function SimulationPage() {
       {sim?.advanced && (
         <KernelHeader
           loading={kernel.loading}
-          active={useKernelPath && !kernelError}
+          active={useKernelPath && !kernelError && !!kernelOutcome}
           unavailable={!!(kernel.error || kernelError)}
           seed={sim.prngSeed ?? 42}
           outcome={kernelOutcome}
           history={kernelHistory}
+          onVerify={async () => {
+            if (!sim || !useKernelPath || !kernelOutcome) {
+              toast.error("Run a simulation first.");
+              return null;
+            }
+            try {
+              const scenario = buildKernelScenario(sim, swarmMode);
+              const seed = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
+              const result = await kernel.runSimulation(scenario, TOTAL_ROUNDS, seed);
+              const a = JSON.stringify(kernelOutcome);
+              const b = JSON.stringify(result.outcomeVector);
+              return a === b;
+            } catch (e) {
+              toast.error("Reproducibility run failed: " + (e instanceof Error ? e.message : String(e)));
+              return null;
+            }
+          }}
         />
       )}
       <div className="glass rounded-[22px]">
