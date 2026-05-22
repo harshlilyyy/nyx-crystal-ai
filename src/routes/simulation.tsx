@@ -1519,7 +1519,7 @@ function StateChip({ label, v }: { label: string; v: number }) {
 }
 
 function KernelHeader({
-  loading, active, unavailable, seed, outcome, history,
+  loading, active, unavailable, seed, outcome, history, onVerify,
 }: {
   loading: boolean;
   active: boolean;
@@ -1527,21 +1527,23 @@ function KernelHeader({
   seed: number;
   outcome: OutcomeVector | null;
   history: RoundState[] | null;
+  onVerify?: () => Promise<boolean | null>;
 }) {
   const [open, setOpen] = useState(false);
+  const [verifyState, setVerifyState] = useState<"idle" | "running" | "pass" | "fail">("idle");
   const trajectory = active && outcome && history ? computeTrajectoryMetrics(history, outcome) : null;
   const fmt = (n: number) => (n >= 0 ? `+${n.toFixed(3)}` : n.toFixed(3));
   return (
     <div className="glass rounded-[18px] px-3 py-2 text-[11px]">
-      {loading && <span className="text-muted-foreground">⏳ Loading deterministic kernel…</span>}
+      {loading && <span className="text-muted-foreground">⏳ Loading Python engine…</span>}
       {active && (
         <span className="font-medium text-primary">
-          ▶ Deterministic Kernel Active (seed: {seed})
+          ✓ Deterministic Kernel · seed {seed}
         </span>
       )}
       {unavailable && (
         <span className="text-muted-foreground">
-          ⚠ Kernel unavailable — using emulated state
+          ⚠ Kernel not available — using fallback
         </span>
       )}
       {outcome && (
