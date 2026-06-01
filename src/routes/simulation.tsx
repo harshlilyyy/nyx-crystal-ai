@@ -210,6 +210,115 @@ function SimulationPage() {
     }
   }
 
+  async function generateRoundNarrative({
+    sim,
+    roundIndex,
+    runtime,
+    preEvents,
+    institutionalPayload,
+  }: {
+    sim: Simulation;
+    roundIndex: number;
+    runtime?: Record<string, AgentRuntime>;
+    preEvents: { agentId: string; kind: string; description: string }[];
+    institutionalPayload: ReturnType<typeof buildInstitutionalPayload>;
+  }): Promise<{ director: string; feed: FeedItem[] }> {
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: {
+          task: "round",
+          seed: sim.seed,
+          ontology: sim.ontology,
+          agentIds: sim.agentIds,
+          round: roundIndex + 1,
+          totalRounds: TOTAL_ROUNDS,
+          opts,
+          prior: directorNotes,
+          advanced: !!sim.advanced,
+          runtime: runtime ? runtimeForPrompt(runtime) : undefined,
+          events: preEvents,
+          pastInsight: sim.advanced ? sim.pastInsight : undefined,
+          swarmMode,
+          institutional: institutionalPayload,
+        },
+      });
+      if (error) throw error;
+      return { director: data.director, feed: data.feed as FeedItem[] };
+    } catch (e) {
+      if (!sim.advanced || !runtime) throw e;
+      console.warn("Round narration unavailable; using deterministic kernel narration:", e);
+      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+    }
+  }
+
+  function updateDerivedTelemetryFromKernel(
+    runtime: Record<string, AgentRuntime>,
+    round: RoundState,
+    i: number,
+    prevCore: Record<string, CoreState>,
+    agentIds: string[],
+  ) {
+    const seedNum = typeof sim?.prngSeed === "number" ? sim.prngSeed : 42;
+    if (Object.keys(cascadeThresholdsRef.current).length === 0) {
+      cascadeThresholdsRef.current = cascadeThresholdsForAgents(seedNum, agentIds);
+      const reps: Record<string, number> = {};
+      for (const id of agentIds) reps[id] = runtime[id]?.core?.reputation ?? 0.5;
+      influenceNetworkRef.current = buildScaleFreeNetwork(agentIds, seedNum, reps);
+    }
+    const modes: (string | undefined)[] = [];
+    for (const id of [...agentIds].sort()) {
+      const rt = runtime[id];
+      if (!rt?.core) continue;
+      modes.push(rt.modeV5);
+      const vmode = verdictModeFromV5(rt.modeV5);
+      modesPerAgentRef.current[id] = vmode;
+      const prox = computeAttractorProximity(rt.core, vmode);
+      const hist = proximityHistoryRef.current[id] ?? [];
+      hist.push(prox);
+      if (hist.length > 10) hist.shift();
+      proximityHistoryRef.current[id] = hist;
+      lockedRoundsRef.current[id] = prox > 0.90 ? (lockedRoundsRef.current[id] ?? 0) + 1 : 0;
+    }
+    entropyHistoryRef.current = [...entropyHistoryRef.current, computeNarrativeEntropy(modes)];
+    const observed = round.world.trust_proxy ?? trustProxy(runtime);
+    trustHistoryRef.current.push(observed);
+    polHistoryRef.current.push(polarizationScore(runtime));
+    if (trustHistoryRef.current.length > 50) trustHistoryRef.current.shift();
+    if (polHistoryRef.current.length > 50) polHistoryRef.current.shift();
+    trustVarHistoryRef.current.push(rollingVariance(trustHistoryRef.current, 5));
+    polVarHistoryRef.current.push(rollingVariance(polHistoryRef.current, 5));
+    if (trustVarHistoryRef.current.length > 50) trustVarHistoryRef.current.shift();
+    if (polVarHistoryRef.current.length > 50) polVarHistoryRef.current.shift();
+    const anyCascade = Object.values(runtime).some((r) => r.cascade);
+    if (anyCascade) lastCascadeRoundRef.current = i;
+    recoveryHistoryRef.current.push(lastCascadeRoundRef.current === null ? i + 1 : i - lastCascadeRoundRef.current);
+    if (recoveryHistoryRef.current.length > 50) recoveryHistoryRef.current.shift();
+    stabilityReportRef.current = detectEarlyWarnings(trustVarHistoryRef.current, polVarHistoryRef.current, recoveryHistoryRef.current);
+    cascadePressureRef.current = applyCascadeContagion(runtime, influenceNetworkRef.current);
+    modePrevHistoryRef.current.push(modePrevalence(runtime));
+    if (modePrevHistoryRef.current.length > 50) modePrevHistoryRef.current.shift();
+    try {
+      observatoryHistoryRef.current = [...observatoryHistoryRef.current, buildObservatorySnapshot({
+        round: i,
+        runtime,
+        prevCore,
+        trust: observed,
+        polarization: polHistoryRef.current[polHistoryRef.current.length - 1] ?? 0,
+        entropy: entropyHistoryRef.current[entropyHistoryRef.current.length - 1] ?? 0,
+        centralization: round.world.centralization ?? centralizationRef.current.value,
+        cascadePressure: cascadePressureRef.current,
+        modePrev: modePrevHistoryRef.current[modePrevHistoryRef.current.length - 1],
+        influenceNetwork: influenceNetworkRef.current,
+        stability: stabilityReportRef.current,
+        lockedRounds: lockedRoundsRef.current,
+        cascadeTriggered: anyCascade,
+        recentCascade: lastCascadeRoundRef.current !== null && i - lastCascadeRoundRef.current <= 1,
+      })].slice(-TOTAL_ROUNDS);
+    } catch (e) {
+      console.warn("Observatory snapshot failed:", e);
+    }
+  }
+
   async function runRound(i: number) {
     if (!sim) return;
 
