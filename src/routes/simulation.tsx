@@ -1607,28 +1607,12 @@ function buildDeterministicKernelReport(
 function buildKernelScenario(sim: Simulation, swarmMode: SwarmMode): Scenario {
   const agents = sim.agentIds.map((id) => {
     const a = NYX_AGENTS.find((x) => x.id === id);
-    const rt = sim.runtime?.[id];
-    const c: CoreState | undefined = rt?.core;
-    const initial_state: Record<string, number> = {};
-    if (c) {
-      initial_state.self_worth = c.self_worth;
-      initial_state.anxiety = c.anxiety;
-      initial_state.consistency = c.consistency;
-      initial_state.momentum = c.momentum;
-      initial_state.reputation = c.reputation;
-      initial_state.opportunity_access = c.opportunity_access;
-      initial_state.fragility_index = c.fragility_index;
-      initial_state.lock_in = c.lock_in;
-      initial_state.learning_rate = c.learning_rate;
-      initial_state.energy = c.energy;
-      initial_state.phenomenological_penetration = c.phenomenological_penetration;
-    }
     return {
       name: id,
       role: a?.role ?? "agent",
       personality: a?.personality ?? "",
-      initial_state,
-      emotional_anchor: rt?.emotionalAnchor ?? null,
+      initial_state: {},
+      emotional_anchor: null,
     };
   });
   // Build influence_network from graph edges (default uniform if none)
