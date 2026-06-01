@@ -223,6 +223,9 @@ function SimulationPage() {
     preEvents: { agentId: string; kind: string; description: string }[];
     institutionalPayload: ReturnType<typeof buildInstitutionalPayload>;
   }): Promise<{ director: string; feed: FeedItem[] }> {
+    if (sim.advanced && runtime) {
+      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+    }
     try {
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
@@ -624,6 +627,20 @@ function SimulationPage() {
     if (!sim) return;
     setRunning(true);
     try {
+      if (sim.advanced) {
+        const report = buildDeterministicKernelReport(sim, kernelOutcome, kernelHistory, swarmMode, framework);
+        const updated = {
+          ...sim,
+          report,
+          status: "done" as const,
+          swarmMode,
+          institutionalFramework: swarmMode === "institutional" ? framework : null,
+        };
+        saveSimulation(updated);
+        recordLearning(updated, report);
+        nav({ to: "/report" });
+        return;
+      }
       const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
       const trajectory =
         useKernelPath && kernelHistory && kernelOutcome
