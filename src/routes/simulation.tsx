@@ -1498,6 +1498,112 @@ function buildInstitutionalPayload(
   };
 }
 
+function kernelModeToV5(mode: string | undefined): AgentRuntime["modeV5"] {
+  switch (mode) {
+    case "AVOID": return "avoid";
+    case "RECOVER": return "recovery";
+    case "OPTIMIZE": return "growth";
+    case "EXECUTE": return "steady";
+    default: return "steady";
+  }
+}
+
+function buildKernelEvents(round: RoundState, agentIds: string[]) {
+  return agentIds.flatMap((id) => {
+    const snap = round.agents[id];
+    const agent = NYX_AGENTS.find((a) => a.id === id);
+    if (!snap) return [];
+    if (snap.blocked || snap.cascade_active) {
+      return [{
+        agentId: id,
+        kind: "kernel_cascade",
+        description: `${agent?.name ?? id} entered a failure cascade.`,
+      }];
+    }
+    return [];
+  });
+}
+
+function buildKernelNarrativeRound(
+  sim: Simulation,
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number,
+): { director: string; feed: FeedItem[] } {
+  const feed: FeedItem[] = sim.agentIds.map((id, idx) => {
+    const agent = NYX_AGENTS.find((a) => a.id === id);
+    const rt = runtime[id];
+    const mode = rt?.modeV5 ?? "steady";
+    const score = rt?.core ? successScore(rt) : 0.5;
+    const action: FeedItem["action"] = mode === "avoid" || mode === "collapse" ? "WITHDRAW" : mode === "recovery" ? "COMMENT" : "POST";
+    const content = mode === "avoid" || mode === "collapse"
+      ? `${agent?.name ?? id} is withdrawing as pressure compounds.`
+      : mode === "recovery"
+        ? `${agent?.name ?? id} is recovering stability through a cautious response.`
+        : mode === "growth" || mode === "spike"
+          ? `${agent?.name ?? id} is gaining momentum and visibility.`
+          : `${agent?.name ?? id} is holding a steady trajectory.`;
+    return {
+      id: `kernel_${sim.prngSeed ?? 42}_${roundIndex}_${id}`,
+      agentId: id,
+      agentName: agent?.name ?? id,
+      agentAvatar: agent?.avatar ?? "🤖",
+      platform: idx % 2 === 0 ? "twitter" : "reddit",
+      action,
+      content,
+      ts: (sim.prngSeed ?? 42) * 1000 + roundIndex * 100 + idx,
+      likes: Math.round(score * 3),
+      replies: Math.max(0, Math.round((rt?.core?.anxiety ?? 0.3) * 2) - 1),
+    };
+  });
+  const avg = feed.length
+    ? sim.agentIds.reduce((sum, id) => sum + (runtime[id]?.core ? successScore(runtime[id]) : 0.5), 0) / sim.agentIds.length
+    : 0.5;
+  return {
+    director: `Kernel round ${roundIndex + 1}: deterministic state transition complete; mean success ${Math.round(avg * 100)}%.`,
+    feed,
+  };
+}
+
+function buildDeterministicKernelReport(
+  sim: Simulation,
+  outcome: OutcomeVector | null,
+  history: RoundState[] | null,
+  swarmMode: SwarmMode,
+  framework: InstitutionalFramework | null,
+): Report {
+  const runtimes = Object.values(sim.runtime ?? {});
+  const scored = runtimes.map((rt) => ({ id: rt.agentId, score: rt.core ? successScore(rt) : 0.5 }));
+  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  const winnerId = scored[0]?.id ?? sim.agentIds[0] ?? "agent";
+  const winner = NYX_AGENTS.find((a) => a.id === winnerId)?.name ?? winnerId;
+  const rep = outcome?.reputation_mean ?? meanReputation(sim.runtime ?? {});
+  const trust = outcome?.trust_proxy ?? trustProxy(sim.runtime ?? {});
+  const ineq = outcome?.inequality ?? 0;
+  const confidence = Math.max(0.05, Math.min(0.95, 0.3 + rep * 0.3 + trust * 0.25 + (1 - ineq) * 0.15));
+  const trajectory = history && outcome ? computeTrajectoryMetrics(history, outcome) : null;
+  return {
+    winner,
+    confidence,
+    scores: scored.slice(0, 5).map((s) => ({ label: NYX_AGENTS.find((a) => a.id === s.id)?.name ?? s.id, value: s.score })),
+    bestCase: `The kernel projects ${winner} maintaining the strongest trajectory if trust remains near ${trust.toFixed(2)} and opportunity access keeps compounding.`,
+    worstCase: `The main risk is a cascade or stalemate if inequality rises beyond ${ineq.toFixed(2)} and recovery modes fail to stabilize the network.`,
+    hiddenFailures: [
+      "A fragile agent can still trigger local withdrawal if anxiety compounds for multiple rounds.",
+      "Centralized influence can make the outcome sensitive to a small number of high-reputation agents.",
+      trajectory ? `Dominant trajectory: ${VERDICT_MODE_LABELS[trajectory.verdictMode]}.` : "Confidence is a single-run estimate until multi-trial aggregation is run.",
+    ],
+    timeline: sim.rounds.map((r) => ({ period: `Round ${r.index + 1}`, event: r.director })),
+    summary: `Deterministic kernel run complete for seed ${sim.prngSeed ?? 42}. The same scenario and seed will reproduce the same state history and outcome vector.`,
+    confidenceBreakdown: sim.advanced ? {
+      structuralFeasibility: rep * 10,
+      stakeholderAlignment: trust * 10,
+      riskExposure: (1 - ineq) * 10,
+      evidenceStrength: history ? 8 : 5,
+      framework: swarmMode === "institutional" ? framework : null,
+    } : undefined,
+  };
+}
+
 function buildKernelScenario(sim: Simulation, swarmMode: SwarmMode): Scenario {
   const agents = sim.agentIds.map((id) => {
     const a = NYX_AGENTS.find((x) => x.id === id);
