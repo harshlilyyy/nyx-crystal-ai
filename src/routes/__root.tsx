@@ -50,7 +50,7 @@ export const Route = createRootRoute({
     ],
     scripts: [
       {
-        src: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js",
+        src: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js",
       },
     ],
   }),
