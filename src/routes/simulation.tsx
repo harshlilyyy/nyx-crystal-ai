@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getCurrent, saveSimulation } from "@/lib/nyx-store";
 import { NYX_AGENTS } from "@/lib/nyx-agents";
-import type { FeedItem, Round, Simulation } from "@/lib/nyx-types";
+import type { FeedItem, Report, Round, Simulation } from "@/lib/nyx-types";
 import { Loader2, Play, Settings2, ChevronUp, ChevronDown, Heart, Repeat2, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -149,6 +149,7 @@ function SimulationPage() {
   const observatoryHistoryRef = useRef<ObservatorySnapshot[]>([]);
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
+  const advancedKernelPending = !!sim?.advanced && (!kernel.ready || !!kernel.error);
 
   useEffect(() => {
     const s = getCurrent();
