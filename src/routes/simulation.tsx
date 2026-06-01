@@ -231,7 +231,15 @@ function SimulationPage() {
         if (rt.core) prevCore[aid] = { ...rt.core };
       }
     }
-    if (sim.advanced) {
+    if (sim.advanced && kHistory && runtime) {
+      const round = kHistory[Math.min(i, kHistory.length - 1)];
+      if (round) {
+        overwriteCoreFromKernel(runtime, round, sim.agentIds);
+        preEvents = buildKernelEvents(round, sim.agentIds);
+        updateDerivedTelemetryFromKernel(runtime, round, i, prevCore, sim.agentIds);
+        setDynamicsTick((t) => t + 1);
+      }
+    } else if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
         // === Dynamical primitives init (advanced + v5, once per run) ===
@@ -411,34 +419,12 @@ function SimulationPage() {
         }
       }
 
-      // Overwrite runtime CoreState with deterministic kernel-computed values
-      if (kHistory && runtime) {
-        const round = kHistory[Math.min(i, kHistory.length - 1)];
-        if (round) overwriteCoreFromKernel(runtime, round, sim.agentIds);
-      }
     }
 
     const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
-
-    const { data, error } = await supabase.functions.invoke("nyx-ai", {
-      body: {
-        task: "round",
-        seed: sim.seed,
-        ontology: sim.ontology,
-        agentIds: sim.agentIds,
-        round: i + 1,
-        totalRounds: TOTAL_ROUNDS,
-        opts,
-        prior: directorNotes,
-        advanced: !!sim.advanced,
-        runtime: runtime ? runtimeForPrompt(runtime) : undefined,
-        events: preEvents,
-        pastInsight: sim.advanced ? sim.pastInsight : undefined,
-        swarmMode,
-        institutional: institutionalPayload,
-      },
+    const aiRound = await generateRoundNarrative({
+      sim, roundIndex: i, runtime, preEvents, institutionalPayload,
     });
-    if (error) throw error;
 
     // Inject random events as visible feed items
     const eventFeed: FeedItem[] = preEvents.map((ev, idx) => {
@@ -459,7 +445,7 @@ function SimulationPage() {
       };
     });
 
-    const combinedFeed = [...eventFeed, ...(data.feed as FeedItem[])];
+    const combinedFeed = [...eventFeed, ...aiRound.feed];
 
     // ---- Advanced causal post-round ----
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
@@ -492,7 +478,7 @@ function SimulationPage() {
 
     const round: Round = {
       index: i,
-      director: data.director,
+      director: aiRound.director,
       feed: combinedFeed,
       stateSnapshot,
       events: preEvents,
