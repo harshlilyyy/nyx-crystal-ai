@@ -343,6 +343,7 @@ function SimulationPage() {
         if (rt.core) prevCore[aid] = { ...rt.core };
       }
     }
+    if (sim.advanced && !runtime) runtime = initRuntime(sim.agentIds);
     if (sim.advanced && kHistory && runtime) {
       const round = kHistory[Math.min(i, kHistory.length - 1)];
       if (round) {
@@ -352,7 +353,6 @@ function SimulationPage() {
         setDynamicsTick((t) => t + 1);
       }
     } else if (sim.advanced) {
-      if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
         // === Dynamical primitives init (advanced + v5, once per run) ===
         const seedNum = typeof sim.prngSeed === "number" ? sim.prngSeed : 42;
