@@ -1460,20 +1460,20 @@ function SimulationPage() {
       {!done ? (
         <Button
           onClick={runAll}
-          disabled={running}
+          disabled={running || advancedKernelPending}
           className="h-12 w-full rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-          {roundIdx === 0 ? "Start Simulation" : "Resume"}
+          {advancedKernelPending ? "Loading Python engine…" : roundIdx === 0 ? "Start Simulation" : "Resume"}
         </Button>
       ) : (
         <Button
           onClick={finish}
-          disabled={running}
+          disabled={running || advancedKernelPending}
           className="h-12 w-full rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Finish Simulation
+          {advancedKernelPending ? "Loading Python engine…" : "Finish Simulation"}
         </Button>
       )}
     </PageShell>
