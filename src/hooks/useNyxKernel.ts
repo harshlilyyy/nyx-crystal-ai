@@ -85,7 +85,7 @@ declare global {
   }
 }
 
-const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/";
+const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
 
 async function waitForLoader(timeoutMs = 20000): Promise<void> {
   if (typeof window === "undefined") throw new Error("Pyodide requires a browser");
