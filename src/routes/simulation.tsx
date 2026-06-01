@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getCurrent, saveSimulation } from "@/lib/nyx-store";
 import { NYX_AGENTS } from "@/lib/nyx-agents";
-import type { FeedItem, Round, Simulation } from "@/lib/nyx-types";
+import type { FeedItem, Report, Round, Simulation } from "@/lib/nyx-types";
 import { Loader2, Play, Settings2, ChevronUp, ChevronDown, Heart, Repeat2, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -149,6 +149,7 @@ function SimulationPage() {
   const observatoryHistoryRef = useRef<ObservatorySnapshot[]>([]);
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
+  const advancedKernelPending = !!sim?.advanced && (!kernel.ready || !!kernel.error);
 
   useEffect(() => {
     const s = getCurrent();
@@ -209,6 +210,118 @@ function SimulationPage() {
     }
   }
 
+  async function generateRoundNarrative({
+    sim,
+    roundIndex,
+    runtime,
+    preEvents,
+    institutionalPayload,
+  }: {
+    sim: Simulation;
+    roundIndex: number;
+    runtime?: Record<string, AgentRuntime>;
+    preEvents: { agentId: string; kind: string; description: string }[];
+    institutionalPayload: ReturnType<typeof buildInstitutionalPayload>;
+  }): Promise<{ director: string; feed: FeedItem[] }> {
+    if (sim.advanced && runtime) {
+      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke("nyx-ai", {
+        body: {
+          task: "round",
+          seed: sim.seed,
+          ontology: sim.ontology,
+          agentIds: sim.agentIds,
+          round: roundIndex + 1,
+          totalRounds: TOTAL_ROUNDS,
+          opts,
+          prior: directorNotes,
+          advanced: !!sim.advanced,
+          runtime: runtime ? runtimeForPrompt(runtime) : undefined,
+          events: preEvents,
+          pastInsight: sim.advanced ? sim.pastInsight : undefined,
+          swarmMode,
+          institutional: institutionalPayload,
+        },
+      });
+      if (error) throw error;
+      return { director: data.director, feed: data.feed as FeedItem[] };
+    } catch (e) {
+      if (!sim.advanced || !runtime) throw e;
+      console.warn("Round narration unavailable; using deterministic kernel narration:", e);
+      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+    }
+  }
+
+  function updateDerivedTelemetryFromKernel(
+    runtime: Record<string, AgentRuntime>,
+    round: RoundState,
+    i: number,
+    prevCore: Record<string, CoreState>,
+    agentIds: string[],
+  ) {
+    const seedNum = typeof sim?.prngSeed === "number" ? sim.prngSeed : 42;
+    if (Object.keys(cascadeThresholdsRef.current).length === 0) {
+      cascadeThresholdsRef.current = cascadeThresholdsForAgents(seedNum, agentIds);
+      const reps: Record<string, number> = {};
+      for (const id of agentIds) reps[id] = runtime[id]?.core?.reputation ?? 0.5;
+      influenceNetworkRef.current = buildScaleFreeNetwork(agentIds, seedNum, reps);
+    }
+    const modes: (string | undefined)[] = [];
+    for (const id of [...agentIds].sort()) {
+      const rt = runtime[id];
+      if (!rt?.core) continue;
+      modes.push(rt.modeV5);
+      const vmode = verdictModeFromV5(rt.modeV5);
+      modesPerAgentRef.current[id] = vmode;
+      const prox = computeAttractorProximity(rt.core, vmode);
+      const hist = proximityHistoryRef.current[id] ?? [];
+      hist.push(prox);
+      if (hist.length > 10) hist.shift();
+      proximityHistoryRef.current[id] = hist;
+      lockedRoundsRef.current[id] = prox > 0.90 ? (lockedRoundsRef.current[id] ?? 0) + 1 : 0;
+    }
+    entropyHistoryRef.current = [...entropyHistoryRef.current, computeNarrativeEntropy(modes)];
+    const observed = round.world.trust_proxy ?? trustProxy(runtime);
+    trustHistoryRef.current.push(observed);
+    polHistoryRef.current.push(polarizationScore(runtime));
+    if (trustHistoryRef.current.length > 50) trustHistoryRef.current.shift();
+    if (polHistoryRef.current.length > 50) polHistoryRef.current.shift();
+    trustVarHistoryRef.current.push(rollingVariance(trustHistoryRef.current, 5));
+    polVarHistoryRef.current.push(rollingVariance(polHistoryRef.current, 5));
+    if (trustVarHistoryRef.current.length > 50) trustVarHistoryRef.current.shift();
+    if (polVarHistoryRef.current.length > 50) polVarHistoryRef.current.shift();
+    const anyCascade = Object.values(runtime).some((r) => r.cascade);
+    if (anyCascade) lastCascadeRoundRef.current = i;
+    recoveryHistoryRef.current.push(lastCascadeRoundRef.current === null ? i + 1 : i - lastCascadeRoundRef.current);
+    if (recoveryHistoryRef.current.length > 50) recoveryHistoryRef.current.shift();
+    stabilityReportRef.current = detectEarlyWarnings(trustVarHistoryRef.current, polVarHistoryRef.current, recoveryHistoryRef.current);
+    cascadePressureRef.current = applyCascadeContagion(runtime, influenceNetworkRef.current);
+    modePrevHistoryRef.current.push(modePrevalence(runtime));
+    if (modePrevHistoryRef.current.length > 50) modePrevHistoryRef.current.shift();
+    try {
+      observatoryHistoryRef.current = [...observatoryHistoryRef.current, buildObservatorySnapshot({
+        round: i,
+        runtime,
+        prevCore,
+        trust: observed,
+        polarization: polHistoryRef.current[polHistoryRef.current.length - 1] ?? 0,
+        entropy: entropyHistoryRef.current[entropyHistoryRef.current.length - 1] ?? 0,
+        centralization: round.world.centralization ?? centralizationRef.current.value,
+        cascadePressure: cascadePressureRef.current,
+        modePrev: modePrevHistoryRef.current[modePrevHistoryRef.current.length - 1],
+        influenceNetwork: influenceNetworkRef.current,
+        stability: stabilityReportRef.current,
+        lockedRounds: lockedRoundsRef.current,
+        cascadeTriggered: anyCascade,
+        recentCascade: lastCascadeRoundRef.current !== null && i - lastCascadeRoundRef.current <= 1,
+      })].slice(-TOTAL_ROUNDS);
+    } catch (e) {
+      console.warn("Observatory snapshot failed:", e);
+    }
+  }
+
   async function runRound(i: number) {
     if (!sim) return;
 
@@ -230,7 +343,16 @@ function SimulationPage() {
         if (rt.core) prevCore[aid] = { ...rt.core };
       }
     }
-    if (sim.advanced) {
+    if (sim.advanced && !runtime) runtime = initRuntime(sim.agentIds);
+    if (sim.advanced && kHistory && runtime) {
+      const round = kHistory[Math.min(i, kHistory.length - 1)];
+      if (round) {
+        overwriteCoreFromKernel(runtime, round, sim.agentIds);
+        preEvents = buildKernelEvents(round, sim.agentIds);
+        updateDerivedTelemetryFromKernel(runtime, round, i, prevCore, sim.agentIds);
+        setDynamicsTick((t) => t + 1);
+      }
+    } else if (sim.advanced) {
       if (!runtime) runtime = initRuntime(sim.agentIds);
       if (hasV5(runtime)) {
         // === Dynamical primitives init (advanced + v5, once per run) ===
@@ -410,47 +532,25 @@ function SimulationPage() {
         }
       }
 
-      // Overwrite runtime CoreState with deterministic kernel-computed values
-      if (kHistory && runtime) {
-        const round = kHistory[Math.min(i, kHistory.length - 1)];
-        if (round) overwriteCoreFromKernel(runtime, round, sim.agentIds);
-      }
     }
 
     const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
-
-    const { data, error } = await supabase.functions.invoke("nyx-ai", {
-      body: {
-        task: "round",
-        seed: sim.seed,
-        ontology: sim.ontology,
-        agentIds: sim.agentIds,
-        round: i + 1,
-        totalRounds: TOTAL_ROUNDS,
-        opts,
-        prior: directorNotes,
-        advanced: !!sim.advanced,
-        runtime: runtime ? runtimeForPrompt(runtime) : undefined,
-        events: preEvents,
-        pastInsight: sim.advanced ? sim.pastInsight : undefined,
-        swarmMode,
-        institutional: institutionalPayload,
-      },
+    const aiRound = await generateRoundNarrative({
+      sim, roundIndex: i, runtime, preEvents, institutionalPayload,
     });
-    if (error) throw error;
 
     // Inject random events as visible feed items
     const eventFeed: FeedItem[] = preEvents.map((ev, idx) => {
       const a = NYX_AGENTS.find((x) => x.id === ev.agentId);
       return {
-        id: `ev_${i}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        id: `ev_${sim.prngSeed ?? 42}_${i}_${idx}_${ev.agentId}_${ev.kind}`,
         agentId: ev.agentId,
         agentName: a?.name ?? ev.agentId,
         agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
         platform: idx % 2 === 0 ? "twitter" : "reddit",
         action: "POST",
         content: ev.description,
-        ts: Date.now(),
+        ts: (sim.prngSeed ?? 42) * 1000 + i * 100 + idx,
         likes: 0,
         replies: 0,
         isRandomEvent: true,
@@ -458,7 +558,7 @@ function SimulationPage() {
       };
     });
 
-    const combinedFeed = [...eventFeed, ...(data.feed as FeedItem[])];
+    const combinedFeed = [...eventFeed, ...aiRound.feed];
 
     // ---- Advanced causal post-round ----
     let stateSnapshot: Record<string, AgentRuntime> | undefined;
@@ -491,7 +591,7 @@ function SimulationPage() {
 
     const round: Round = {
       index: i,
-      director: data.director,
+      director: aiRound.director,
       feed: combinedFeed,
       stateSnapshot,
       events: preEvents,
@@ -528,6 +628,20 @@ function SimulationPage() {
     if (!sim) return;
     setRunning(true);
     try {
+      if (sim.advanced) {
+        const report = buildDeterministicKernelReport(sim, kernelOutcome, kernelHistory, swarmMode, framework);
+        const updated = {
+          ...sim,
+          report,
+          status: "done" as const,
+          swarmMode,
+          institutionalFramework: swarmMode === "institutional" ? framework : null,
+        };
+        saveSimulation(updated);
+        recordLearning(updated, report);
+        nav({ to: "/report" });
+        return;
+      }
       const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
       const trajectory =
         useKernelPath && kernelHistory && kernelOutcome
@@ -1347,20 +1461,20 @@ function SimulationPage() {
       {!done ? (
         <Button
           onClick={runAll}
-          disabled={running}
+          disabled={running || advancedKernelPending}
           className="h-12 w-full rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-          {roundIdx === 0 ? "Start Simulation" : "Resume"}
+          {advancedKernelPending ? "Loading Python engine…" : roundIdx === 0 ? "Start Simulation" : "Resume"}
         </Button>
       ) : (
         <Button
           onClick={finish}
-          disabled={running}
+          disabled={running || advancedKernelPending}
           className="h-12 w-full rounded-2xl gradient-rose text-primary-foreground shadow-[var(--shadow-soft)]"
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Finish Simulation
+          {advancedKernelPending ? "Loading Python engine…" : "Finish Simulation"}
         </Button>
       )}
     </PageShell>
@@ -1385,31 +1499,121 @@ function buildInstitutionalPayload(
   };
 }
 
+function kernelModeToV5(mode: string | undefined): AgentRuntime["modeV5"] {
+  switch (mode) {
+    case "AVOID": return "avoid";
+    case "RECOVER": return "recovery";
+    case "OPTIMIZE": return "growth";
+    case "EXECUTE": return "steady";
+    default: return "steady";
+  }
+}
+
+function buildKernelEvents(round: RoundState, agentIds: string[]) {
+  return agentIds.flatMap((id) => {
+    const snap = round.agents[id];
+    const agent = NYX_AGENTS.find((a) => a.id === id);
+    if (!snap) return [];
+    if (snap.blocked || snap.cascade_active) {
+      return [{
+        agentId: id,
+        kind: "kernel_cascade",
+        description: `${agent?.name ?? id} entered a failure cascade.`,
+      }];
+    }
+    return [];
+  });
+}
+
+function buildKernelNarrativeRound(
+  sim: Simulation,
+  runtime: Record<string, AgentRuntime>,
+  roundIndex: number,
+): { director: string; feed: FeedItem[] } {
+  const feed: FeedItem[] = sim.agentIds.map((id, idx) => {
+    const agent = NYX_AGENTS.find((a) => a.id === id);
+    const rt = runtime[id];
+    const mode = rt?.modeV5 ?? "steady";
+    const score = rt?.core ? successScore(rt) : 0.5;
+    const action: FeedItem["action"] = mode === "avoid" || mode === "collapse" ? "WITHDRAW" : mode === "recovery" ? "COMMENT" : "POST";
+    const content = mode === "avoid" || mode === "collapse"
+      ? `${agent?.name ?? id} is withdrawing as pressure compounds.`
+      : mode === "recovery"
+        ? `${agent?.name ?? id} is recovering stability through a cautious response.`
+        : mode === "growth" || mode === "spike"
+          ? `${agent?.name ?? id} is gaining momentum and visibility.`
+          : `${agent?.name ?? id} is holding a steady trajectory.`;
+    return {
+      id: `kernel_${sim.prngSeed ?? 42}_${roundIndex}_${id}`,
+      agentId: id,
+      agentName: agent?.name ?? id,
+      agentAvatar: agent?.avatar ?? "🤖",
+      platform: idx % 2 === 0 ? "twitter" : "reddit",
+      action,
+      content,
+      ts: (sim.prngSeed ?? 42) * 1000 + roundIndex * 100 + idx,
+      likes: Math.round(score * 3),
+      replies: Math.max(0, Math.round((rt?.core?.anxiety ?? 0.3) * 2) - 1),
+    };
+  });
+  const avg = feed.length
+    ? sim.agentIds.reduce((sum, id) => sum + (runtime[id]?.core ? successScore(runtime[id]) : 0.5), 0) / sim.agentIds.length
+    : 0.5;
+  return {
+    director: `Kernel round ${roundIndex + 1}: deterministic state transition complete; mean success ${Math.round(avg * 100)}%.`,
+    feed,
+  };
+}
+
+function buildDeterministicKernelReport(
+  sim: Simulation,
+  outcome: OutcomeVector | null,
+  history: RoundState[] | null,
+  swarmMode: SwarmMode,
+  framework: InstitutionalFramework | null,
+): Report {
+  const runtimes = Object.values(sim.runtime ?? {});
+  const scored = runtimes.map((rt) => ({ id: rt.agentId, score: rt.core ? successScore(rt) : 0.5 }));
+  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  const winnerId = scored[0]?.id ?? sim.agentIds[0] ?? "agent";
+  const winner = NYX_AGENTS.find((a) => a.id === winnerId)?.name ?? winnerId;
+  const rep = outcome?.reputation_mean ?? meanReputation(sim.runtime ?? {});
+  const trust = outcome?.trust_proxy ?? trustProxy(sim.runtime ?? {});
+  const ineq = outcome?.inequality ?? 0;
+  const confidence = Math.max(0.05, Math.min(0.95, 0.3 + rep * 0.3 + trust * 0.25 + (1 - ineq) * 0.15));
+  const trajectory = history && outcome ? computeTrajectoryMetrics(history, outcome) : null;
+  return {
+    winner,
+    confidence,
+    scores: scored.slice(0, 5).map((s) => ({ label: NYX_AGENTS.find((a) => a.id === s.id)?.name ?? s.id, value: s.score })),
+    bestCase: `The kernel projects ${winner} maintaining the strongest trajectory if trust remains near ${trust.toFixed(2)} and opportunity access keeps compounding.`,
+    worstCase: `The main risk is a cascade or stalemate if inequality rises beyond ${ineq.toFixed(2)} and recovery modes fail to stabilize the network.`,
+    hiddenFailures: [
+      "A fragile agent can still trigger local withdrawal if anxiety compounds for multiple rounds.",
+      "Centralized influence can make the outcome sensitive to a small number of high-reputation agents.",
+      trajectory ? `Dominant trajectory: ${VERDICT_MODE_LABELS[trajectory.verdictMode]}.` : "Confidence is a single-run estimate until multi-trial aggregation is run.",
+    ],
+    timeline: sim.rounds.map((r) => ({ period: `Round ${r.index + 1}`, event: r.director })),
+    summary: `Deterministic kernel run complete for seed ${sim.prngSeed ?? 42}. The same scenario and seed will reproduce the same state history and outcome vector.`,
+    confidenceBreakdown: sim.advanced ? {
+      structuralFeasibility: rep * 10,
+      stakeholderAlignment: trust * 10,
+      riskExposure: (1 - ineq) * 10,
+      evidenceStrength: history ? 8 : 5,
+      framework: swarmMode === "institutional" ? framework : null,
+    } : undefined,
+  };
+}
+
 function buildKernelScenario(sim: Simulation, swarmMode: SwarmMode): Scenario {
   const agents = sim.agentIds.map((id) => {
     const a = NYX_AGENTS.find((x) => x.id === id);
-    const rt = sim.runtime?.[id];
-    const c: CoreState | undefined = rt?.core;
-    const initial_state: Record<string, number> = {};
-    if (c) {
-      initial_state.self_worth = c.self_worth;
-      initial_state.anxiety = c.anxiety;
-      initial_state.consistency = c.consistency;
-      initial_state.momentum = c.momentum;
-      initial_state.reputation = c.reputation;
-      initial_state.opportunity_access = c.opportunity_access;
-      initial_state.fragility_index = c.fragility_index;
-      initial_state.lock_in = c.lock_in;
-      initial_state.learning_rate = c.learning_rate;
-      initial_state.energy = c.energy;
-      initial_state.phenomenological_penetration = c.phenomenological_penetration;
-    }
     return {
       name: id,
       role: a?.role ?? "agent",
       personality: a?.personality ?? "",
-      initial_state,
-      emotional_anchor: rt?.emotionalAnchor ?? null,
+      initial_state: {},
+      emotional_anchor: null,
     };
   });
   // Build influence_network from graph edges (default uniform if none)
