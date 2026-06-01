@@ -539,14 +539,14 @@ function SimulationPage() {
     const eventFeed: FeedItem[] = preEvents.map((ev, idx) => {
       const a = NYX_AGENTS.find((x) => x.id === ev.agentId);
       return {
-        id: `ev_${i}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        id: `ev_${sim.prngSeed ?? 42}_${i}_${idx}_${ev.agentId}_${ev.kind}`,
         agentId: ev.agentId,
         agentName: a?.name ?? ev.agentId,
         agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
         platform: idx % 2 === 0 ? "twitter" : "reddit",
         action: "POST",
         content: ev.description,
-        ts: Date.now(),
+        ts: (sim.prngSeed ?? 42) * 1000 + i * 100 + idx,
         likes: 0,
         replies: 0,
         isRandomEvent: true,
