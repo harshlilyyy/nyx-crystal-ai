@@ -223,10 +223,13 @@ function SimulationPage() {
     preEvents: { agentId: string; kind: string; description: string }[];
     institutionalPayload: ReturnType<typeof buildInstitutionalPayload>;
   }): Promise<{ director: string; feed: FeedItem[] }> {
-    if (sim.advanced && runtime) {
-      return buildKernelNarrativeRound(sim, runtime, roundIndex);
-    }
+    // Always try LLM narration first — kernel stays deterministic for state,
+    // LLM only describes it. Falls back to deterministic narration on error.
     try {
+      const kernelRound =
+        sim.advanced && kernelHistory && kernelHistory[roundIndex]
+          ? kernelHistory[roundIndex]
+          : undefined;
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "round",
@@ -243,16 +246,19 @@ function SimulationPage() {
           pastInsight: sim.advanced ? sim.pastInsight : undefined,
           swarmMode,
           institutional: institutionalPayload,
+          kernelRound,
         },
       });
       if (error) throw error;
+      if (!data?.director || !Array.isArray(data?.feed)) throw new Error("empty narrative");
       return { director: data.director, feed: data.feed as FeedItem[] };
     } catch (e) {
-      if (!sim.advanced || !runtime) throw e;
       console.warn("Round narration unavailable; using deterministic kernel narration:", e);
-      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+      if (sim.advanced && runtime) return buildKernelNarrativeRound(sim, runtime, roundIndex);
+      throw e;
     }
   }
+
 
   function updateDerivedTelemetryFromKernel(
     runtime: Record<string, AgentRuntime>,
@@ -628,8 +634,95 @@ function SimulationPage() {
     if (!sim) return;
     setRunning(true);
     try {
+      // Advanced mode: try LLM-narrated report grounded on the deterministic
+      // kernel outcome. Fall back to the deterministic skeleton if it fails.
       if (sim.advanced) {
-        const report = buildDeterministicKernelReport(sim, kernelOutcome, kernelHistory, swarmMode, framework);
+        const deterministic = buildDeterministicKernelReport(sim, kernelOutcome, kernelHistory, swarmMode, framework);
+        const trajectory =
+          kernelHistory && kernelOutcome
+            ? computeTrajectoryMetrics(kernelHistory, kernelOutcome)
+            : null;
+        let report = deterministic;
+        try {
+          const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
+          const { data, error } = await supabase.functions.invoke("nyx-ai", {
+            body: {
+              task: "report",
+              seed: sim.seed,
+              ontology: sim.ontology,
+              agentIds: sim.agentIds,
+              rounds: sim.rounds,
+              advanced: true,
+              runtime: sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+              swarmMode,
+              institutional: institutionalPayload,
+              trajectory: trajectory ?? undefined,
+              kernelOutcome: kernelOutcome ?? undefined,
+              kernelHistory: kernelHistory ?? undefined,
+            },
+          });
+          if (error) throw error;
+          if (data?.report) {
+            // Merge LLM narrative on top of deterministic skeleton so winner/
+            // scores/confidence stay kernel-grounded, while best/worst/summary
+            // come from the LLM.
+            report = {
+              ...deterministic,
+              ...data.report,
+              winner: deterministic.winner,
+              scores: deterministic.scores,
+              confidence: data.report.confidence ?? deterministic.confidence,
+              confidenceBreakdown: data.report.confidenceBreakdown ?? deterministic.confidenceBreakdown,
+            };
+          }
+          try {
+            const { analyzeLoops } = await import("@/lib/nyx-causal");
+            report = { ...report, loopAnalysis: analyzeLoops(sim.rounds) };
+          } catch (err) { console.warn("loop analysis failed", err); }
+          // BlackSwan Assassin
+          try {
+            const cutoff = Math.floor(TOTAL_ROUNDS * 0.65);
+            const assassinRounds = sim.rounds.slice(0, Math.max(cutoff, 1));
+            const { data: aData } = await supabase.functions.invoke("nyx-ai", {
+              body: {
+                task: "assassin",
+                seed: sim.seed,
+                rounds: assassinRounds.map((r) => ({ index: r.index, director: r.director })),
+                runtime: sim.runtime ? runtimeForPrompt(sim.runtime) : undefined,
+              },
+            });
+            if (aData?.assassin) {
+              let assassin = aData.assassin;
+              try {
+                const { runDivergence, coerceCoreVar } = await import("@/lib/nyx-divergence");
+                const tv = coerceCoreVar(assassin.targetVariable) ?? "reputation";
+                const dir: "up" | "down" = assassin.perturbationDirection === "down" ? "down" : "up";
+                if (sim.runtime) {
+                  const div = runDivergence(sim.runtime, tv, dir, Math.min(6, Math.max(2, sim.rounds.length || 4)));
+                  assassin = {
+                    ...assassin,
+                    targetVariable: tv,
+                    perturbationDirection: dir,
+                    perturbationMagnitude: div.perturbationMagnitude,
+                    baselineOutcome: div.baselineOutcome,
+                    perturbedOutcome: div.perturbedOutcome,
+                    outcomeDistance: div.outcomeDistance,
+                    sensitivityScore: div.sensitivityScore,
+                    sigmaShift: div.sigmaShift,
+                    cascadePath: div.cascadePath,
+                    constraintClassification: div.classification,
+                  };
+                }
+              } catch (err) { console.warn("divergence failed", err); }
+              report = { ...report, assassin };
+            }
+          } catch (err) {
+            console.warn("assassin failed", err);
+          }
+        } catch (err) {
+          console.warn("LLM report unavailable; using deterministic narrative:", err);
+          toast.warning("AI narrative unavailable — showing deterministic summary.");
+        }
         const updated = {
           ...sim,
           report,
@@ -642,6 +735,7 @@ function SimulationPage() {
         nav({ to: "/report" });
         return;
       }
+
       const institutionalPayload = buildInstitutionalPayload(sim, swarmMode, framework);
       const trajectory =
         useKernelPath && kernelHistory && kernelOutcome
