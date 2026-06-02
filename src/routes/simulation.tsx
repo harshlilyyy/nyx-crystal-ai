@@ -223,10 +223,13 @@ function SimulationPage() {
     preEvents: { agentId: string; kind: string; description: string }[];
     institutionalPayload: ReturnType<typeof buildInstitutionalPayload>;
   }): Promise<{ director: string; feed: FeedItem[] }> {
-    if (sim.advanced && runtime) {
-      return buildKernelNarrativeRound(sim, runtime, roundIndex);
-    }
+    // Always try LLM narration first — kernel stays deterministic for state,
+    // LLM only describes it. Falls back to deterministic narration on error.
     try {
+      const kernelRound =
+        sim.advanced && kernelHistory && kernelHistory[roundIndex]
+          ? kernelHistory[roundIndex]
+          : undefined;
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
         body: {
           task: "round",
@@ -243,16 +246,19 @@ function SimulationPage() {
           pastInsight: sim.advanced ? sim.pastInsight : undefined,
           swarmMode,
           institutional: institutionalPayload,
+          kernelRound,
         },
       });
       if (error) throw error;
+      if (!data?.director || !Array.isArray(data?.feed)) throw new Error("empty narrative");
       return { director: data.director, feed: data.feed as FeedItem[] };
     } catch (e) {
-      if (!sim.advanced || !runtime) throw e;
       console.warn("Round narration unavailable; using deterministic kernel narration:", e);
-      return buildKernelNarrativeRound(sim, runtime, roundIndex);
+      if (sim.advanced && runtime) return buildKernelNarrativeRound(sim, runtime, roundIndex);
+      throw e;
     }
   }
+
 
   function updateDerivedTelemetryFromKernel(
     runtime: Record<string, AgentRuntime>,
