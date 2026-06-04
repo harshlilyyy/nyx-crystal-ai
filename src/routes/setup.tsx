@@ -232,6 +232,10 @@ function SetupPage() {
       {/* Historical Anchor — Phase 1 placeholder; gated to Advanced */}
       {sim?.advanced && <HistoricalAnchorCard />}
 
+      {/* Real-World Context — session-only, gated to Advanced */}
+      {sim?.advanced && <RealWorldContextCard sim={sim} setSim={setSim} />}
+
+
       {step === 1 && (
         <div className="glass rounded-[24px] p-5">
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
