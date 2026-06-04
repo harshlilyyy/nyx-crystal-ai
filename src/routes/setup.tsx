@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { initRuntime } from "@/lib/nyx-causal";
 import { HistoricalAnchorCard } from "@/components/HistoricalAnchorCard";
+import { RealWorldContextCard } from "@/components/RealWorldContextCard";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
@@ -45,7 +46,7 @@ function SetupPage() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
-        body: { task: "ontology", seed },
+        body: { task: "ontology", seed, realWorldContext: sim?.realWorldContext },
       });
       if (error) throw error;
       const items: OntologyNode[] = data.ontology ?? [];
@@ -230,6 +231,10 @@ function SetupPage() {
 
       {/* Historical Anchor — Phase 1 placeholder; gated to Advanced */}
       {sim?.advanced && <HistoricalAnchorCard />}
+
+      {/* Real-World Context — session-only, gated to Advanced */}
+      {sim?.advanced && <RealWorldContextCard sim={sim} setSim={setSim} />}
+
 
       {step === 1 && (
         <div className="glass rounded-[24px] p-5">
