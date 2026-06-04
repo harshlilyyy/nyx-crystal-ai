@@ -46,7 +46,7 @@ function SetupPage() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("nyx-ai", {
-        body: { task: "ontology", seed },
+        body: { task: "ontology", seed, realWorldContext: sim?.realWorldContext },
       });
       if (error) throw error;
       const items: OntologyNode[] = data.ontology ?? [];
