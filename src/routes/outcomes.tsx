@@ -569,6 +569,14 @@ function AgentDrillDown({ sim, agentId, histories }: { sim: Simulation; agentId:
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12px] font-semibold">{a.name}</div>
           <div className="truncate text-[10px] text-muted-foreground">{a.role}</div>
+          {sim.realWorldContext?.evidenceKeeperId === agentId && (
+            <div
+              className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700"
+              title={sim.realWorldContext.summary || "Holds real-world evidence"}
+            >
+              📰 Holds real-world context
+            </div>
+          )}
         </div>
         <span
           className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider"
