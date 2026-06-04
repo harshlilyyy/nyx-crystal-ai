@@ -161,10 +161,51 @@ Deno.serve(async (req) => {
       }));
     }
     if ("pastInsight" in payload) payload.pastInsight = clampStr(payload.pastInsight, 2000);
+    if ("text" in payload) payload.text = clampStr(payload.text, 16000);
+    if ("realWorldContext" in payload) payload.realWorldContext = clampJson(payload.realWorldContext, 4000);
+
+    if (task === "enrich") {
+      const text = clampStr(payload.text, 16000);
+      if (!text.trim()) {
+        return Response.json({ entities: [], claim: "", risk_factor: "", summary: "" }, { headers: corsHeaders });
+      }
+      const out = await structured(
+        `Source text:\n${text}\n\nExtract the 3-10 most important entities (people, organizations, concepts/events), the core argument or claim being made, a 1-sentence summary, and any hidden fragility or risk factor.`,
+        "You are an analyst extracting real-world context for a strategic simulation. Be precise and concise. Identify only entities actually present in the text.",
+        "enrich",
+        {
+          type: "object",
+          properties: {
+            entities: {
+              type: "array",
+              maxItems: 12,
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  type: { type: "string", enum: ["person", "organization", "event", "concept", "location"] },
+                },
+                required: ["name", "type"],
+              },
+            },
+            claim: { type: "string" },
+            risk_factor: { type: "string" },
+            summary: { type: "string" },
+          },
+          required: ["entities", "claim", "risk_factor", "summary"],
+        },
+        { temperature: 0.2 },
+      );
+      return Response.json(out, { headers: corsHeaders });
+    }
 
     if (task === "ontology") {
+      const rwc = payload.realWorldContext as { entities?: Array<{name:string;type:string}>; claim?: string; risk_factor?: string } | undefined;
+      const enrichSuffix = rwc && Array.isArray(rwc.entities) && rwc.entities.length
+        ? `\n\nReal-world context to weave into the ontology:\nEntities: ${JSON.stringify(rwc.entities)}\nClaim: ${rwc.claim ?? ""}\nRisk factor: ${rwc.risk_factor ?? ""}\nInclude at least 2 ontology entries that directly reflect these real-world entities or risk factor.`
+        : "";
       const out = await structured(
-        `Seed: ${payload.seed}\n\nProduce 6-8 ontology entities (key concepts, actors, forces) for strategic simulation.`,
+        `Seed: ${payload.seed}${enrichSuffix}\n\nProduce 6-8 ontology entities (key concepts, actors, forces) for strategic simulation.`,
         "You design ontologies for strategic simulations. Be concise and incisive.",
         "ontology",
         {
