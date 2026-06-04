@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { initRuntime } from "@/lib/nyx-causal";
 import { HistoricalAnchorCard } from "@/components/HistoricalAnchorCard";
+import { RealWorldContextCard } from "@/components/RealWorldContextCard";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
