@@ -364,6 +364,23 @@ export interface Simulation {
     rationalityGap: string;
     summary: string;
   };
+  // Real-World Data Injection — session-only, advanced mode only
+  realWorldContext?: RealWorldContext;
+}
+
+export interface RealWorldEntity {
+  name: string;
+  type: "person" | "organization" | "event" | "concept" | "location";
+}
+
+export interface RealWorldContext {
+  entities: RealWorldEntity[];
+  claim: string;
+  risk_factor: string;
+  summary: string;
+  sources: string[];          // file names / "Pasted text"
+  evidenceKeeperId?: string;  // agentId assigned the Evidence Keeper role
+  createdAt: number;
 }
 
 // v6.4 — persistent learning summary (last 30 runs)
