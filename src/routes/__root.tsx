@@ -81,9 +81,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 import { TabBar } from "@/components/TabBar";
 import { Toaster } from "@/components/ui/sonner";
-import { CosmicArena } from "@/components/CosmicArena";
 import { useAuth } from "@/hooks/useAuth";
-import { useCosmicBackground } from "@/hooks/useCosmicBackground";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
@@ -93,7 +91,6 @@ function RootComponent() {
   const { isAuthenticated, loading } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [cosmicBg] = useCosmicBackground();
   const isPublic = PUBLIC_ROUTES.has(pathname);
 
   useEffect(() => {
@@ -106,7 +103,6 @@ function RootComponent() {
 
   return (
     <>
-      {cosmicBg && <CosmicArena />}
       <div className="relative z-10">
         {loading && !isPublic ? null : showApp ? <Outlet /> : null}
       </div>
