@@ -44,27 +44,15 @@ function HomePage() {
 
   return (
     <PageShell>
-      <div className="relative pb-4 pt-4 text-center">
-        <div
-          className="pointer-events-none absolute inset-x-0 -top-6 mx-auto h-64 w-full overflow-hidden rounded-[28px]"
-          aria-hidden="true"
-          style={{
-            maskImage: "radial-gradient(ellipse at center, black 55%, transparent 80%)",
-            WebkitMaskImage: "radial-gradient(ellipse at center, black 55%, transparent 80%)",
-          }}
-        >
-          <DiamondSwarm count={4500} className="h-full w-full" size={42} />
-        </div>
-        <div className="relative">
-          <div className="label-eyebrow mb-3">For a heart of gold</div>
-          <h1 className="font-display text-7xl font-semibold tracking-tight leading-none mix-blend-difference text-white">
-            NYX
-          </h1>
-          <div className="mx-auto mt-3 h-px w-16" style={{ background: "#C8A97E" }} />
-          <p className="mx-auto mt-4 max-w-xs text-sm italic text-muted-foreground text-balance font-display">
-            Strategic simulation, beautifully simple.
-          </p>
-        </div>
+      <div className="pb-4 pt-4 text-center">
+        <div className="label-eyebrow mb-3">For a heart of gold</div>
+        <h1 className="font-display text-7xl font-semibold tracking-tight leading-none text-foreground">
+          NYX
+        </h1>
+        <div className="mx-auto mt-3 h-px w-16" style={{ background: "#C8A97E" }} />
+        <p className="mx-auto mt-4 max-w-xs text-sm italic text-muted-foreground text-balance font-display">
+          Strategic simulation, beautifully simple.
+        </p>
       </div>
 
       <button
