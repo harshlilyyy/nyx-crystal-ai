@@ -12,7 +12,6 @@ import { Switch } from "@/components/ui/switch";
 import { initRuntime } from "@/lib/nyx-causal";
 import { HistoricalAnchorCard } from "@/components/HistoricalAnchorCard";
 import { RealWorldContextCard } from "@/components/RealWorldContextCard";
-import { useCosmicBackground } from "@/hooks/useCosmicBackground";
 
 export const Route = createFileRoute("/setup")({
   head: () => ({
@@ -26,7 +25,6 @@ export const Route = createFileRoute("/setup")({
 
 function SetupPage() {
   const nav = useNavigate();
-  const [cosmicBg, setCosmicBg] = useCosmicBackground();
   const [sim, setSim] = useState<Simulation | undefined>();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [seed, setSeed] = useState("");
