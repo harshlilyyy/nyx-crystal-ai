@@ -214,18 +214,6 @@ function SetupPage() {
                 }}
               />
             </div>
-            <div
-              className="flex items-center justify-between gap-3 rounded-2xl bg-white/50 px-3 py-2"
-              title="Render a cosmic 3D scene behind the UI."
-            >
-              <div className="flex flex-col">
-                <span className="text-[11px] font-semibold">Cosmic Background</span>
-                <span className="text-[10px] leading-snug text-muted-foreground">
-                  Floating particles & ethereal planets behind the frosted glass.
-                </span>
-              </div>
-              <Switch checked={cosmicBg} onCheckedChange={setCosmicBg} />
-            </div>
             <V8Toggles sim={sim} setSim={setSim} />
             <button
               onClick={async () => {
