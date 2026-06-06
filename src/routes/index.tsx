@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
-import { DiamondSwarm } from "@/components/DiamondSwarm";
 import { listSimulations, newSimulationId, saveSimulation, setCurrentId } from "@/lib/nyx-store";
 import type { Simulation } from "@/lib/nyx-types";
 import { Plus, ChevronRight, Sparkles } from "lucide-react";
