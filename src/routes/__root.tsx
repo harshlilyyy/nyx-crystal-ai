@@ -104,6 +104,7 @@ function RootComponent() {
 
   return (
     <>
+      <CosmicVideoBackground />
       <div className="relative z-10">
         {loading && !isPublic ? null : showApp ? <Outlet /> : null}
       </div>
