@@ -81,7 +81,6 @@ export function CosmicVideoBackground() {
           muted
           playsInline
           preload="auto"
-          // @ts-expect-error iOS hint
           disablePictureInPicture
           disableRemotePlayback
         />
