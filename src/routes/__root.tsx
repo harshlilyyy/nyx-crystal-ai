@@ -80,6 +80,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 import { TabBar } from "@/components/TabBar";
+import { CosmicVideoBackground } from "@/components/CosmicVideoBackground";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation, useNavigate } from "@tanstack/react-router";
