@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import flowers from "@/assets/nyx-flowers.jpg.asset.json";
-import web from "@/assets/nyx-web.jpg.asset.json";
 
 /**
- * Cinematic layered background: deep purple flowers + spider-web overlay,
- * with multi-layer 3D parallax driven by pointer + slow ambient drift.
- * Sits behind all app content, never blocks interaction.
+ * Cinematic black-hole code-vortex background.
+ * Pure canvas — accretion disk + swirling code particles being pulled into
+ * a singularity, with subtle 3D parallax tilt and iOS-style glass overlay
+ * for legibility of foreground UI.
  */
 export function CosmicVideoBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
-  const flowerRef = useRef<HTMLDivElement>(null);
-  const webRef = useRef<HTMLDivElement>(null);
-  const glowRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
-  const target = useRef({ x: 0, y: 0 });
-  const current = useRef({ x: 0, y: 0 });
+  const tiltRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
@@ -25,129 +20,237 @@ export function CosmicVideoBackground() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // Pointer-driven 3D tilt on the scene wrapper
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
-      target.current.x = (e.clientX / window.innerWidth) * 2 - 1;
-      target.current.y = (e.clientY / window.innerHeight) * 2 - 1;
+      tiltRef.current.tx = (e.clientX / window.innerWidth) * 2 - 1;
+      tiltRef.current.ty = (e.clientY / window.innerHeight) * 2 - 1;
     };
-    const onOrient = (e: DeviceOrientationEvent) => {
-      if (e.gamma == null || e.beta == null) return;
-      target.current.x = Math.max(-1, Math.min(1, e.gamma / 30));
-      target.current.y = Math.max(-1, Math.min(1, e.beta / 45));
-    };
-
-    const start = performance.now();
-    const tick = (t: number) => {
-      const ease = reduced ? 1 : 0.06;
-      current.current.x += (target.current.x - current.current.x) * ease;
-      current.current.y += (target.current.y - current.current.y) * ease;
-      const time = (t - start) / 1000;
-      const driftX = Math.sin(time * 0.12) * 0.35;
-      const driftY = Math.cos(time * 0.09) * 0.35;
-      const px = current.current.x + driftX;
-      const py = current.current.y + driftY;
-
-      if (flowerRef.current) {
-        const rx = (-py * 4).toFixed(3);
-        const ry = (px * 5).toFixed(3);
-        const tx = (px * 28).toFixed(2);
-        const ty = (py * 22).toFixed(2);
-        flowerRef.current.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(1.18)`;
-      }
-      if (webRef.current) {
-        const tx = (px * 60).toFixed(2);
-        const ty = (py * 48).toFixed(2);
-        const rz = (px * 1.2).toFixed(3);
-        webRef.current.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotate(${rz}deg) scale(1.35)`;
-      }
-      if (glowRef.current) {
-        const tx = (px * -38).toFixed(2);
-        const ty = (py * -30).toFixed(2);
-        glowRef.current.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
     window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("deviceorientation", onOrient, { passive: true });
-    rafRef.current = requestAnimationFrame(tick);
+    let raf = 0;
+    const tick = () => {
+      const t = tiltRef.current;
+      t.x += (t.tx - t.x) * 0.06;
+      t.y += (t.ty - t.y) * 0.06;
+      if (sceneRef.current) {
+        const rx = (-t.y * 4).toFixed(2);
+        const ry = (t.x * 6).toFixed(2);
+        const tx = (t.x * 14).toFixed(2);
+        const ty = (t.y * 10).toFixed(2);
+        sceneRef.current.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(1.04)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
     return () => {
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("deviceorientation", onOrient);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Canvas: black hole + code vortex
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const CHARS = "01{}[]()<>/=*+;:.,_$#&|".split("");
+    let W = 0, H = 0, dpr = 1;
+    let cx = 0, cy = 0, rHole = 0;
+
+    type P = {
+      a: number;        // angle
+      r: number;        // radius
+      v: number;        // angular velocity factor
+      drift: number;    // inward drift per frame
+      ch: string;
+      size: number;
+      hue: number;      // color shift
+      alpha: number;
+    };
+    let particles: P[] = [];
+    let stars: { x: number; y: number; s: number; tw: number }[] = [];
+
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = Math.floor(W * dpr);
+      canvas.height = Math.floor(H * dpr);
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cx = W * 0.42;
+      cy = H * 0.48;
+      rHole = Math.min(W, H) * 0.09;
+
+      const count = Math.min(520, Math.floor((W * H) / 3200));
+      particles = new Array(count).fill(0).map(() => spawn());
+
+      const sCount = Math.min(180, Math.floor((W * H) / 9000));
+      stars = new Array(sCount).fill(0).map(() => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        s: Math.random() * 1.2 + 0.2,
+        tw: Math.random() * Math.PI * 2,
+      }));
+    };
+
+    const spawn = (): P => {
+      const r = rHole * (3 + Math.random() * 7);
+      return {
+        a: Math.random() * Math.PI * 2,
+        r,
+        v: 0.004 + Math.random() * 0.012,
+        drift: 0.15 + Math.random() * 0.55,
+        ch: CHARS[(Math.random() * CHARS.length) | 0],
+        size: 9 + Math.random() * 6,
+        hue: 18 + Math.random() * 24, // amber/orange
+        alpha: 0.45 + Math.random() * 0.55,
+      };
+    };
+
+    let raf = 0;
+    let t0 = performance.now();
+
+    const draw = (now: number) => {
+      const dt = Math.min(48, now - t0);
+      t0 = now;
+      const speed = reduced ? 0.25 : 1;
+
+      // background gradient (deep space)
+      const bg = ctx.createRadialGradient(cx, cy, rHole * 0.5, cx, cy, Math.max(W, H));
+      bg.addColorStop(0, "#020205");
+      bg.addColorStop(0.5, "#04030a");
+      bg.addColorStop(1, "#000000");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // stars
+      ctx.save();
+      for (const s of stars) {
+        s.tw += 0.02;
+        const a = 0.4 + Math.sin(s.tw) * 0.3;
+        ctx.fillStyle = `rgba(220,225,255,${a.toFixed(3)})`;
+        ctx.fillRect(s.x, s.y, s.s, s.s);
+      }
+      ctx.restore();
+
+      // accretion disk glow (warm)
+      const disk = ctx.createRadialGradient(cx, cy, rHole * 0.9, cx, cy, rHole * 6);
+      disk.addColorStop(0, "rgba(255,170,90,0.55)");
+      disk.addColorStop(0.25, "rgba(255,120,60,0.30)");
+      disk.addColorStop(0.6, "rgba(120,60,160,0.18)");
+      disk.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = disk;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rHole * 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // code particles
+      ctx.font = "600 12px 'Courier Prime', ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      for (const p of particles) {
+        // angular swirl — faster near the hole
+        const swirl = (1 + (rHole * 3) / Math.max(p.r, rHole)) * p.v * speed * (dt / 16);
+        p.a += swirl;
+        p.r -= p.drift * speed * (dt / 16) * (1 + (rHole * 2) / Math.max(p.r, rHole));
+
+        if (p.r < rHole * 1.05) {
+          Object.assign(p, spawn());
+          p.r = rHole * (8 + Math.random() * 4);
+          continue;
+        }
+
+        // project with slight ellipse for disk perspective
+        const x = cx + Math.cos(p.a) * p.r;
+        const y = cy + Math.sin(p.a) * p.r * 0.55;
+
+        // tail line (motion streak)
+        const x2 = cx + Math.cos(p.a - swirl * 6) * (p.r + 4);
+        const y2 = cy + Math.sin(p.a - swirl * 6) * (p.r + 4) * 0.55;
+
+        const distT = 1 - Math.min(1, (p.r - rHole) / (rHole * 7));
+        const a = p.alpha * (0.35 + distT * 0.65);
+        const fs = p.size * (0.85 + distT * 0.5);
+
+        ctx.strokeStyle = `hsla(${p.hue}, 95%, 65%, ${(a * 0.5).toFixed(3)})`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        ctx.font = `600 ${fs.toFixed(1)}px 'Courier Prime', ui-monospace, monospace`;
+        ctx.fillStyle = `hsla(${p.hue}, 100%, ${(60 + distT * 25).toFixed(0)}%, ${a.toFixed(3)})`;
+        ctx.shadowColor = `hsla(${p.hue}, 100%, 60%, ${(a * 0.8).toFixed(3)})`;
+        ctx.shadowBlur = 6 + distT * 8;
+        ctx.fillText(p.ch, x, y);
+      }
+      ctx.shadowBlur = 0;
+
+      // event horizon — pure black with thin photon ring
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.arc(cx, cy, rHole, 0, Math.PI * 2);
+      ctx.fill();
+
+      const ring = ctx.createRadialGradient(cx, cy, rHole * 0.92, cx, cy, rHole * 1.18);
+      ring.addColorStop(0, "rgba(0,0,0,0)");
+      ring.addColorStop(0.55, "rgba(255,180,110,0.55)");
+      ring.addColorStop(0.75, "rgba(255,120,80,0.35)");
+      ring.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = ring;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rHole * 1.18, 0, Math.PI * 2);
+      ctx.fill();
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+    raf = requestAnimationFrame(draw);
+    return () => {
+      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(raf);
     };
   }, [reduced]);
 
   return (
     <div
       aria-hidden
-      ref={sceneRef}
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
-      style={{ perspective: "1600px", background: "#08060b" }}
+      style={{ perspective: "1600px", background: "#000" }}
     >
-      {/* Layer 1 — deep nebula glow */}
       <div
-        ref={glowRef}
-        className="absolute inset-[-12%] will-change-transform"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 30% 35%, rgba(168,85,166,0.45) 0%, rgba(80,30,90,0.15) 45%, transparent 75%), radial-gradient(45% 40% at 75% 70%, rgba(220,120,180,0.30) 0%, transparent 70%)",
-          filter: "blur(40px)",
-        }}
-      />
+        ref={sceneRef}
+        className="absolute inset-0 will-change-transform"
+        style={{ transformStyle: "preserve-3d" }}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+      </div>
 
-      {/* Layer 2 — flower hero (parallax + slow zoom) */}
-      <div
-        ref={flowerRef}
-        className="absolute inset-[-10%] will-change-transform"
-        style={{
-          backgroundImage: `url(${flowers.url})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          transformStyle: "preserve-3d",
-          animation: "nyx-breathe 18s ease-in-out infinite",
-          filter: "saturate(1.05) contrast(1.05)",
-        }}
-      />
-
-      {/* Layer 3 — spider web overlay (multiply for ink lines) */}
-      <div
-        ref={webRef}
-        className="absolute inset-[-20%] will-change-transform opacity-[0.55]"
-        style={{
-          backgroundImage: `url(${web.url})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          mixBlendMode: "screen",
-          maskImage:
-            "radial-gradient(120% 100% at 50% 40%, black 0%, black 55%, transparent 90%)",
-          WebkitMaskImage:
-            "radial-gradient(120% 100% at 50% 40%, black 0%, black 55%, transparent 90%)",
-        }}
-      />
-
-      {/* Layer 4 — readability vignette + bottom fade for light frosted UI */}
+      {/* iOS-style frosted glass overlay for cream-themed foreground UI */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 80% at 50% 45%, rgba(255,255,255,0) 0%, rgba(255,255,255,0.25) 55%, rgba(255,255,255,0.70) 100%)",
+            "radial-gradient(120% 90% at 50% 50%, rgba(253,251,247,0.06) 0%, rgba(253,251,247,0.55) 60%, rgba(253,251,247,0.88) 100%)",
+          backdropFilter: "blur(2px) saturate(1.05)",
+          WebkitBackdropFilter: "blur(2px) saturate(1.05)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0) 25%, rgba(255,255,255,0) 70%, rgba(255,255,255,0.45) 100%)",
+            "linear-gradient(180deg, rgba(253,251,247,0.45) 0%, rgba(253,251,247,0) 22%, rgba(253,251,247,0) 70%, rgba(253,251,247,0.55) 100%)",
         }}
       />
-
-      <style>{`
-        @keyframes nyx-breathe {
-          0%, 100% { filter: saturate(1.05) contrast(1.05) brightness(1); }
-          50% { filter: saturate(1.15) contrast(1.08) brightness(1.06); }
-        }
-      `}</style>
     </div>
   );
 }
