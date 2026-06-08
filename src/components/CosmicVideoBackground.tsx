@@ -234,21 +234,12 @@ export function CosmicVideoBackground() {
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       </div>
 
-      {/* iOS-style frosted glass overlay for cream-themed foreground UI */}
+      {/* Subtle vignette only — keep the cosmic animation fully visible */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 50% 50%, rgba(253,251,247,0.06) 0%, rgba(253,251,247,0.55) 60%, rgba(253,251,247,0.88) 100%)",
-          backdropFilter: "blur(2px) saturate(1.05)",
-          WebkitBackdropFilter: "blur(2px) saturate(1.05)",
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(253,251,247,0.45) 0%, rgba(253,251,247,0) 22%, rgba(253,251,247,0) 70%, rgba(253,251,247,0.55) 100%)",
+            "radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.45) 100%)",
         }}
       />
     </div>
@@ -256,3 +247,4 @@ export function CosmicVideoBackground() {
 }
 
 export default CosmicVideoBackground;
+
