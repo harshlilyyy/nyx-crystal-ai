@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { getCurrent, saveSimulation } from "@/lib/nyx-store";
 import { NYX_AGENTS } from "@/lib/nyx-agents";
 import type { Simulation } from "@/lib/nyx-types";
-import { Copy, Download, Share2, Sparkles, Send, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Copy, Download, Share2, Sparkles, Send, ChevronDown, ChevronUp, Loader2, BookmarkPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { StoryModePanel } from "@/components/StoryModePanel";
+import { saveGalleryEntry, autoTagsFromSim, newGalleryId, listGallery } from "@/lib/nyx-gallery";
 
 export const Route = createFileRoute("/report")({
   head: () => ({
