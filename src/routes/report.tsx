@@ -224,6 +224,12 @@ function ReportPage() {
         </Section>
       )}
 
+      {/* Story Mode — seeded narrative retelling */}
+      <StoryModePanel sim={sim} onStoryReady={(s) => setStoryText(s)} />
+
+      {/* Save to community gallery */}
+      <SaveToGalleryCard sim={sim} story={storyText} />
+
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={copy} className="glass h-11 rounded-2xl"><Copy className="mr-2 h-4 w-4" />Copy</Button>
         <Button variant="ghost" onClick={shareX} className="glass h-11 rounded-2xl"><Share2 className="mr-2 h-4 w-4" />Share</Button>
@@ -235,6 +241,70 @@ function ReportPage() {
     </PageShell>
   );
 }
+
+function SaveToGalleryCard({ sim, story }: { sim: Simulation; story: string }) {
+  const [title, setTitle] = useState<string>(sim.seed.slice(0, 60) || "Untitled scenario");
+  const [tagline, setTagline] = useState<string>(sim.report?.summary?.slice(0, 140) ?? "");
+  const [saved, setSaved] = useState<boolean>(false);
+
+  useEffect(() => {
+    const exists = listGallery().some((g) => g.simId === sim.id);
+    setSaved(exists);
+  }, [sim.id]);
+
+  function save() {
+    if (!sim.report) return;
+    const tags = autoTagsFromSim(sim);
+    saveGalleryEntry({
+      id: newGalleryId(),
+      simId: sim.id,
+      seed: sim.seed,
+      prngSeed: sim.prngSeed,
+      title: title.trim() || "Untitled scenario",
+      tagline: tagline.trim(),
+      winner: sim.report.winner,
+      confidence: sim.report.confidence,
+      advanced: !!sim.advanced,
+      agentIds: sim.agentIds,
+      savedAt: Date.now(),
+      tags,
+      story: story || undefined,
+      simulation: sim,
+    });
+    setSaved(true);
+    toast.success("Saved to gallery");
+  }
+
+  return (
+    <div className="glass rounded-[22px] p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary flex items-center gap-1.5">
+          <BookmarkPlus className="h-3 w-3" /> Save to Gallery
+        </div>
+        {saved && <span className="text-[10px] text-muted-foreground">already saved</span>}
+      </div>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Title"
+        className="w-full rounded-xl bg-white/70 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-primary/30"
+      />
+      <input
+        value={tagline}
+        onChange={(e) => setTagline(e.target.value)}
+        placeholder="One-line tagline (optional)"
+        className="mt-2 w-full rounded-xl bg-white/70 px-3 py-2 text-xs outline-none ring-1 ring-border focus:ring-primary/30"
+        maxLength={140}
+      />
+      <Button onClick={save} className="mt-3 h-9 w-full rounded-xl gradient-rose text-primary-foreground text-xs">
+        <BookmarkPlus className="mr-1.5 h-3.5 w-3.5" /> {saved ? "Save Another Copy" : "Save Scenario"}
+      </Button>
+    </div>
+  );
+}
+
+function ReportPageStoryHook() { return null; /* placeholder, unused */ }
+
 
 function ConfidenceGauge({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(1, value));
