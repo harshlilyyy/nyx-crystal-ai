@@ -1180,7 +1180,7 @@ function SimulationPage() {
                     </span>
                   </div>
                   {t.cascade && (
-                    <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.06_25)] px-2 py-1 text-[10px] font-medium text-primary">
+                    <div className="mt-1.5 rounded-xl px-2 py-1 text-[10px] font-medium text-primary animate-cascade-flash animate-cascade-shimmer">
                       ⚠ Cascade active — withdrawal compounding
                     </div>
                   )}
