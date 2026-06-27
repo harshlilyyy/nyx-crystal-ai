@@ -101,9 +101,13 @@ function HomePage() {
         )}
       </section>
 
-      <div className="pt-2 text-center">
-        <Link to="/agents" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-          Browse the agent roster →
+      <div className="flex items-center justify-center gap-4 pt-2 text-xs text-muted-foreground">
+        <Link to="/agents" className="underline-offset-4 hover:underline">
+          Agent roster →
+        </Link>
+        <span className="opacity-40">·</span>
+        <Link to="/gallery" className="underline-offset-4 hover:underline">
+          ✨ Community gallery
         </Link>
       </div>
     </PageShell>
