@@ -25,6 +25,7 @@ export const Route = createFileRoute("/report")({
 function ReportPage() {
   const nav = useNavigate();
   const [sim, setSim] = useState<Simulation | undefined>();
+  const [storyText, setStoryText] = useState<string>("");
 
   useEffect(() => {
     const s = getCurrent();
