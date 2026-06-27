@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 const ALLOWED_TASKS = new Set([
-  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory", "enrich",
+  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory", "enrich", "story",
 ]);
 
 const MAX_STR = 4000;
@@ -517,6 +517,40 @@ Deno.serve(async (req) => {
         }
       );
       return Response.json({ assassin: out }, { headers: corsHeaders });
+    }
+
+    if (task === "story") {
+      // Story Mode: seeded, low-temperature narrative retelling of the simulation.
+      // Deterministic-leaning sampling (low temp + low top_p) so repeated calls with the
+      // same seed/report produce closely consistent prose. UI also caches per simId.
+      const seed = clampStr(payload.seed, 2000);
+      const prngSeed = typeof payload.prngSeed === "number" ? payload.prngSeed : 0;
+      const agents = Array.isArray(payload.agents) ? (payload.agents as string[]).slice(0, 8) : [];
+      const rounds = payload.rounds ?? [];
+      const report = payload.report ?? {};
+      const sys = `You are Nyx's narrative chronicler. Retell a strategic simulation as a short, vivid story — 4 to 6 paragraphs, each 2-4 sentences. Use the actual agent names, the seed, the winner, and the timeline. No bullet points, no headings. Calm, slightly literary tone; second-half should surface tension and the worst-case shadow before resolving.`;
+      const user = `Seed: "${seed}"
+PRNG: ${prngSeed}
+Agents on the panel: ${agents.join(", ")}
+Final verdict: ${report?.winner ?? "—"} (confidence ${Math.round(((report?.confidence ?? 0) as number) * 100)}%)
+Best case: ${(report?.bestCase ?? "").slice(0, 600)}
+Worst case: ${(report?.worstCase ?? "").slice(0, 600)}
+Summary: ${(report?.summary ?? "").slice(0, 800)}
+Rounds (compressed):
+${JSON.stringify(rounds).slice(0, 5000)}
+
+Write the story now. Begin in scene, not summary.`;
+      const data = await callAI({
+        messages: [
+          { role: "system", content: sys },
+          { role: "user", content: user },
+        ],
+        temperature: 0.35,
+        top_p: 0.7,
+      });
+      // deno-lint-ignore no-explicit-any
+      const story = ((data as any).choices?.[0]?.message?.content ?? "").toString().trim();
+      return Response.json({ story }, { headers: corsHeaders });
     }
 
     if (task === "chat") {

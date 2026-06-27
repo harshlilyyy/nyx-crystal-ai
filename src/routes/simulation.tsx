@@ -1180,7 +1180,7 @@ function SimulationPage() {
                     </span>
                   </div>
                   {t.cascade && (
-                    <div className="mt-1.5 rounded-xl bg-[oklch(0.93_0.06_25)] px-2 py-1 text-[10px] font-medium text-primary">
+                    <div className="mt-1.5 rounded-xl px-2 py-1 text-[10px] font-medium text-primary animate-cascade-flash animate-cascade-shimmer">
                       ⚠ Cascade active — withdrawal compounding
                     </div>
                   )}
@@ -1787,6 +1787,17 @@ function actionBadge(action: string) {
 
 function V5Bar({ label, v, tone }: { label: string; v: number; tone: "primary" | "warn" | "muted" }) {
   const pct = Math.max(0, Math.min(100, Math.round(v * 100)));
+  const prevRef = useRef<number>(v);
+  const [delta, setDelta] = useState<number>(0);
+  const [pulseKey, setPulseKey] = useState<number>(0);
+  useEffect(() => {
+    const d = v - prevRef.current;
+    if (Math.abs(d) >= 0.08) {
+      setDelta(d);
+      setPulseKey((k) => k + 1);
+    }
+    prevRef.current = v;
+  }, [v]);
   const fill =
     tone === "warn" ? "bg-[oklch(0.78_0.12_25)]" :
     tone === "primary" ? "gradient-rose" :
@@ -1794,8 +1805,23 @@ function V5Bar({ label, v, tone }: { label: string; v: number; tone: "primary" |
   return (
     <div className="mt-1.5 flex items-center gap-2 text-[10px]">
       <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
-      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full transition-all", fill)} style={{ width: `${pct}%` }} />
+      <div className="relative h-1 flex-1 overflow-visible rounded-full bg-muted">
+        <div
+          key={`fill-${pulseKey}`}
+          className={cn("h-full rounded-full transition-all duration-500", fill, pulseKey > 0 && "animate-momentum-shift")}
+          style={{ width: `${pct}%` }}
+        />
+        {delta !== 0 && (
+          <span
+            key={`delta-${pulseKey}`}
+            className={cn(
+              "pointer-events-none absolute -top-3 right-0 rounded-full px-1 py-0 text-[8px] font-mono font-bold animate-delta-float",
+              delta > 0 ? "text-[oklch(0.45_0.13_150)]" : "text-[oklch(0.45_0.15_25)]"
+            )}
+          >
+            {delta > 0 ? "▲" : "▼"}{Math.abs(delta * 100).toFixed(0)}
+          </span>
+        )}
       </div>
       <span className="w-8 text-right font-mono tabular-nums">{pct}</span>
     </div>
