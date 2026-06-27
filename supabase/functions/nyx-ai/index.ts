@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 const ALLOWED_TASKS = new Set([
-  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory", "enrich",
+  "ontology", "graph", "init_advanced", "round", "report", "chat", "assassin", "game_theory", "enrich", "story",
 ]);
 
 const MAX_STR = 4000;
