@@ -41,7 +41,7 @@ export function PageShell({
         className="mt-16 border-t border-border pt-6 text-center font-display italic text-sm"
         style={{ color: "#C8A97E" }}
       >
-        harshhhhh1dubeyyyyy · Nyx
+        jayantttttt1dubeyyyyyyxnyx
       </footer>
     </div>
   );
