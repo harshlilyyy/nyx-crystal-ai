@@ -100,7 +100,16 @@ export const Route = createFileRoute("/simulation")({
   component: SimulationPage,
 });
 
-const TOTAL_ROUNDS = 20;
+const DEFAULT_ROUNDS = 20;
+const ROUND_OPTIONS = [5, 10, 15, 20, 30, 40, 60];
+const PLATFORMS = ["twitter", "reddit", "instagram", "hackernews"] as const;
+type Platform = typeof PLATFORMS[number];
+const PLATFORM_LABELS: Record<Platform, string> = {
+  twitter: "Twitter",
+  reddit: "Reddit",
+  instagram: "Instagram",
+  hackernews: "Hacker News",
+};
 
 function SimulationPage() {
   const nav = useNavigate();
