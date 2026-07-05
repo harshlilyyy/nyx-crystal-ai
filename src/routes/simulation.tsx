@@ -1550,6 +1550,8 @@ function SimulationPage() {
       <div className="grid grid-cols-2 gap-3">
         <FeedColumn label="Twitter" items={twitter} flags={evidenceFlags} />
         <FeedColumn label="Reddit" items={reddit} flags={evidenceFlags} />
+        <FeedColumn label="Instagram" items={instagram} flags={evidenceFlags} />
+        <FeedColumn label="Hacker News" items={hackernews} flags={evidenceFlags} />
       </div>
 
       {/* Mini graph */}
