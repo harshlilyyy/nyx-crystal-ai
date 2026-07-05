@@ -160,6 +160,7 @@ function SimulationPage() {
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
   const advancedKernelPending = !!sim?.advanced && (!kernel.ready || !!kernel.error);
+  const TOTAL_ROUNDS = sim?.totalRounds ?? DEFAULT_ROUNDS;
 
   useEffect(() => {
     const s = getCurrent();
