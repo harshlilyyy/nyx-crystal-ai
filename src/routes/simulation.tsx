@@ -617,6 +617,8 @@ function SimulationPage() {
     };
     setTwitter((p) => [...round.feed.filter((f) => f.platform === "twitter"), ...p]);
     setReddit((p) => [...round.feed.filter((f) => f.platform === "reddit"), ...p]);
+    setInstagram((p) => [...round.feed.filter((f) => f.platform === "instagram"), ...p]);
+    setHackernews((p) => [...round.feed.filter((f) => f.platform === "hackernews"), ...p]);
     setDirectorNotes((p) => [...p, round.director]);
     const updated: Simulation = {
       ...sim,
