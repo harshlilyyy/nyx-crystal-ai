@@ -900,6 +900,26 @@ function SimulationPage() {
         </button>
         {showControls && (
           <div className="space-y-3 px-4 pb-4">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex flex-col">
+                <span>Rounds</span>
+                <span className="text-[10px] text-muted-foreground">Simulation length (locked once started)</span>
+              </span>
+              <select
+                value={TOTAL_ROUNDS}
+                disabled={roundIdx > 0 || running}
+                onChange={(e) => {
+                  if (!sim) return;
+                  const next = { ...sim, totalRounds: Number(e.target.value) };
+                  setSim(next); saveSimulation(next);
+                }}
+                className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none disabled:opacity-60"
+              >
+                {ROUND_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n} rounds</option>
+                ))}
+              </select>
+            </div>
             {([
               ["swarm", "Swarm Mode"],
               ["sharpTone", "Sharp Tone"],
