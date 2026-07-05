@@ -338,6 +338,8 @@ export interface Simulation {
   // advanced
   advanced?: boolean;
   runtime?: Record<string, AgentRuntime>;
+  // user-configurable simulation length (default 20)
+  totalRounds?: number;
   // v6.4 — reproducibility & learning
   prngSeed?: number;          // mulberry32 seed for stochastic events
   pastInsight?: string;       // injected from prior runs (advanced only)
