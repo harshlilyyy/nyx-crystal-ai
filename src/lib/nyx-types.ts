@@ -29,7 +29,7 @@ export interface FeedItem {
   agentId: string;
   agentName: string;
   agentAvatar: string;
-  platform: "twitter" | "reddit";
+  platform: "twitter" | "reddit" | "instagram" | "hackernews";
   action: AgentAction;
   content: string;
   ts: number;
