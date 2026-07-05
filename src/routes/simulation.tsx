@@ -566,7 +566,7 @@ function SimulationPage() {
         agentId: ev.agentId,
         agentName: a?.name ?? ev.agentId,
         agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
-        platform: idx % 2 === 0 ? "twitter" : "reddit",
+        platform: PLATFORMS[idx % PLATFORMS.length],
         action: "POST",
         content: ev.description,
         ts: (sim.prngSeed ?? 42) * 1000 + i * 100 + idx,
