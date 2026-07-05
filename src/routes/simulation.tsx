@@ -118,6 +118,8 @@ function SimulationPage() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [twitter, setTwitter] = useState<FeedItem[]>([]);
   const [reddit, setReddit] = useState<FeedItem[]>([]);
+  const [instagram, setInstagram] = useState<FeedItem[]>([]);
+  const [hackernews, setHackernews] = useState<FeedItem[]>([]);
   const [directorNotes, setDirectorNotes] = useState<string[]>([]);
   const [showControls, setShowControls] = useState(false);
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
