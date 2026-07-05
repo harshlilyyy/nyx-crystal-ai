@@ -198,6 +198,8 @@ function SimulationPage() {
       const all = next.rounds.flatMap((r) => r.feed);
       setTwitter(all.filter((f) => f.platform === "twitter"));
       setReddit(all.filter((f) => f.platform === "reddit"));
+      setInstagram(all.filter((f) => f.platform === "instagram"));
+      setHackernews(all.filter((f) => f.platform === "hackernews"));
       setDirectorNotes(next.rounds.map((r) => r.director));
     }
   }, [nav]);
