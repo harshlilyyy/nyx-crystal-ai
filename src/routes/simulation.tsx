@@ -100,7 +100,16 @@ export const Route = createFileRoute("/simulation")({
   component: SimulationPage,
 });
 
-const TOTAL_ROUNDS = 20;
+const DEFAULT_ROUNDS = 20;
+const ROUND_OPTIONS = [5, 10, 15, 20, 30, 40, 60];
+const PLATFORMS = ["twitter", "reddit", "instagram", "hackernews"] as const;
+type Platform = typeof PLATFORMS[number];
+const PLATFORM_LABELS: Record<Platform, string> = {
+  twitter: "Twitter",
+  reddit: "Reddit",
+  instagram: "Instagram",
+  hackernews: "Hacker News",
+};
 
 function SimulationPage() {
   const nav = useNavigate();
@@ -109,6 +118,8 @@ function SimulationPage() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [twitter, setTwitter] = useState<FeedItem[]>([]);
   const [reddit, setReddit] = useState<FeedItem[]>([]);
+  const [instagram, setInstagram] = useState<FeedItem[]>([]);
+  const [hackernews, setHackernews] = useState<FeedItem[]>([]);
   const [directorNotes, setDirectorNotes] = useState<string[]>([]);
   const [showControls, setShowControls] = useState(false);
   const [opts, setOpts] = useState({ swarm: false, sharpTone: true, adaptive: true, enterprise: false });
@@ -149,6 +160,7 @@ function SimulationPage() {
   const [dynamicsTick, setDynamicsTick] = useState(0); // force re-render after refs update
   const useKernelPath = !!sim?.advanced && kernel.ready && !kernel.error;
   const advancedKernelPending = !!sim?.advanced && (!kernel.ready || !!kernel.error);
+  const TOTAL_ROUNDS = sim?.totalRounds ?? DEFAULT_ROUNDS;
 
   useEffect(() => {
     const s = getCurrent();
@@ -186,6 +198,8 @@ function SimulationPage() {
       const all = next.rounds.flatMap((r) => r.feed);
       setTwitter(all.filter((f) => f.platform === "twitter"));
       setReddit(all.filter((f) => f.platform === "reddit"));
+      setInstagram(all.filter((f) => f.platform === "instagram"));
+      setHackernews(all.filter((f) => f.platform === "hackernews"));
       setDirectorNotes(next.rounds.map((r) => r.director));
     }
   }, [nav]);
@@ -552,7 +566,7 @@ function SimulationPage() {
         agentId: ev.agentId,
         agentName: a?.name ?? ev.agentId,
         agentAvatar: ev.kind === "mentor_comment" ? "🌟" : "📰",
-        platform: idx % 2 === 0 ? "twitter" : "reddit",
+        platform: PLATFORMS[idx % PLATFORMS.length],
         action: "POST",
         content: ev.description,
         ts: (sim.prngSeed ?? 42) * 1000 + i * 100 + idx,
@@ -603,6 +617,8 @@ function SimulationPage() {
     };
     setTwitter((p) => [...round.feed.filter((f) => f.platform === "twitter"), ...p]);
     setReddit((p) => [...round.feed.filter((f) => f.platform === "reddit"), ...p]);
+    setInstagram((p) => [...round.feed.filter((f) => f.platform === "instagram"), ...p]);
+    setHackernews((p) => [...round.feed.filter((f) => f.platform === "hackernews"), ...p]);
     setDirectorNotes((p) => [...p, round.director]);
     const updated: Simulation = {
       ...sim,
@@ -884,6 +900,26 @@ function SimulationPage() {
         </button>
         {showControls && (
           <div className="space-y-3 px-4 pb-4">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex flex-col">
+                <span>Rounds</span>
+                <span className="text-[10px] text-muted-foreground">Simulation length (locked once started)</span>
+              </span>
+              <select
+                value={TOTAL_ROUNDS}
+                disabled={roundIdx > 0 || running}
+                onChange={(e) => {
+                  if (!sim) return;
+                  const next = { ...sim, totalRounds: Number(e.target.value) };
+                  setSim(next); saveSimulation(next);
+                }}
+                className="rounded-full bg-white/70 px-3 py-1 text-xs outline-none disabled:opacity-60"
+              >
+                {ROUND_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n} rounds</option>
+                ))}
+              </select>
+            </div>
             {([
               ["swarm", "Swarm Mode"],
               ["sharpTone", "Sharp Tone"],
@@ -1534,6 +1570,8 @@ function SimulationPage() {
       <div className="grid grid-cols-2 gap-3">
         <FeedColumn label="Twitter" items={twitter} flags={evidenceFlags} />
         <FeedColumn label="Reddit" items={reddit} flags={evidenceFlags} />
+        <FeedColumn label="Instagram" items={instagram} flags={evidenceFlags} />
+        <FeedColumn label="Hacker News" items={hackernews} flags={evidenceFlags} />
       </div>
 
       {/* Mini graph */}
@@ -1634,7 +1672,7 @@ function buildKernelNarrativeRound(
       agentId: id,
       agentName: agent?.name ?? id,
       agentAvatar: agent?.avatar ?? "🤖",
-      platform: idx % 2 === 0 ? "twitter" : "reddit",
+      platform: PLATFORMS[idx % PLATFORMS.length],
       action,
       content,
       ts: (sim.prngSeed ?? 42) * 1000 + roundIndex * 100 + idx,
