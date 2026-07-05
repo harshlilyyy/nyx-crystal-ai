@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
                   agentId: { type: "string" },
                   agentName: { type: "string" },
                   agentAvatar: { type: "string" },
-                  platform: { type: "string", enum: ["twitter", "reddit"] },
+                  platform: { type: "string", enum: ["twitter", "reddit", "instagram", "hackernews"] },
                   action: { type: "string", enum: ["POST", "COMMENT", "LIKE", "REPOST", "IDLE", "MUTE", "WITHDRAW"] },
                   content: { type: "string" },
                   ts: { type: "integer" },
