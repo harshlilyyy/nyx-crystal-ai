@@ -45,7 +45,6 @@ import {
 import type { AgentRuntime, ActiveLoop, CoreState } from "@/lib/nyx-types";
 import { useNyxKernel, type Scenario, type RoundState, type OutcomeVector } from "@/hooks/useNyxKernel";
 import { computeTrajectoryMetrics, VERDICT_MODE_LABELS, VERDICT_MODE_COLORS } from "@/lib/nyx-trajectory";
-import { KernelVaultArchitectureCards } from "@/components/KernelVaultArchitectureCards";
 import { PolarizationBenchmark } from "@/components/PolarizationBenchmark";
 import { ValidationSuite } from "@/components/ValidationSuite";
 import { BenchmarkSuite, useBenchmarkMode } from "@/components/BenchmarkSuite";
@@ -101,7 +100,7 @@ export const Route = createFileRoute("/simulation")({
   component: SimulationPage,
 });
 
-const TOTAL_ROUNDS = 8;
+const TOTAL_ROUNDS = 20;
 
 function SimulationPage() {
   const nav = useNavigate();
@@ -972,13 +971,6 @@ function SimulationPage() {
         <V8Panel sim={sim} setSim={setSim} />
       )}
 
-      {/* Architectural validation cards (Advanced only) */}
-      {sim?.advanced && (
-        <KernelVaultArchitectureCards
-          v8Active={!!sim.v8Flags?.oasis}
-          oasisEndpoint={sim.v8Flags?.oasisEndpoint}
-        />
-      )}
 
       {/* Polarization Benchmark — Prophet (Sci. Reports 2025) calibration */}
       {sim?.advanced && <PolarizationBenchmark />}
