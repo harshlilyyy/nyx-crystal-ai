@@ -1652,7 +1652,7 @@ function buildKernelNarrativeRound(
       agentId: id,
       agentName: agent?.name ?? id,
       agentAvatar: agent?.avatar ?? "🤖",
-      platform: idx % 2 === 0 ? "twitter" : "reddit",
+      platform: PLATFORMS[idx % PLATFORMS.length],
       action,
       content,
       ts: (sim.prngSeed ?? 42) * 1000 + roundIndex * 100 + idx,
